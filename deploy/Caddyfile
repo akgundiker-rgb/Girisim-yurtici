@@ -1,0 +1,6 @@
+# Caddy reverse proxy with automatic HTTPS (Let's Encrypt).
+# Replace the domain, make sure its DNS A record points to this server, and that ports 80 and 443 are open.
+malzeme.example.com {
+    reverse_proxy localhost:3000
+    encode gzip
+}

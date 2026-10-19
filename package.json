@@ -1,0 +1,21 @@
+{
+  "name": "malzeme-takip",
+  "version": "1.0.0",
+  "description": "Fabrika malzeme giriş / sevkiyat takibi — canlı stok seviyeleri, minimum stok alarmı ve her hareket için PDF fişi. Kendi girişi, kendi veritabanı.",
+  "private": true,
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "check": "node --disable-warning=ExperimentalWarning --check server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "nodemailer": "^6.9.16",
+    "pdfkit": "^0.15.2",
+    "web-push": "^3.6.7",
+    "ws": "^8.18.0"
+  }
+}

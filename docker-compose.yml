@@ -1,0 +1,22 @@
+# Docker ile çalıştırma: uygulama + otomatik HTTPS'li Caddy. .env içinde BASE_URL, SESSION_SECRET ve DOMAIN tanımlayın.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DATA_DIR=/data
+      - PORT=3000
+    volumes:
+      - ./data:/data
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    command: caddy reverse-proxy --from ${DOMAIN:-localhost} --to app:3000
+    volumes:
+      - caddy_data:/data
+volumes:
+  caddy_data:

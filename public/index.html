@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Malzeme Takip</title>
+<meta name="theme-color" content="#00204c">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Malzeme Takip">
+<meta name="application-name" content="Malzeme Takip">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2300204c'/%3E%3Cpath d='M18 5 9 18h6l-1 9 9-13h-6z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preload" href="/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-latin-ext-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=20261019">
+</head>
+<body>
+<div class="shell" id="shell">
+  <header class="top">
+    <div class="nav-wrap">
+      <button class="icon-btn" id="menuBtn" aria-label="Menü" title="Menü" data-action="toggle-rail"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="menu nav-menu" id="navMenu" hidden>
+        <button data-action="nav" data-view="dashboard"><svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg> Genel bakış</button>
+        <button data-action="nav" data-view="materials"><svg class="i" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg> Malzemeler ve stok</button>
+        <button data-action="nav" data-view="movements"><svg class="i" viewBox="0 0 24 24"><path d="M4 9h12l-3-3M20 15H8l3 3"/></svg> Hareketler (giriş / sevkiyat)</button>
+        <button data-action="nav" data-view="alerts"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l9 16H3zM12 10v4M12 17.5v.5"/></svg> Alarmlar</button>
+        <div class="sep"></div>
+        <button data-action="new-movement" data-kind="in"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg> Yeni giriş fişi</button>
+        <button data-action="new-movement" data-kind="out"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg> Yeni sevkiyat fişi</button>
+        <button data-action="new-material"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Yeni malzeme kartı</button>
+        <div class="sep"></div>
+        <button data-action="settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg> Ayarlar ve bildirimler</button>
+      </div>
+    </div>
+    <div class="brand">
+      <span class="brand-logo"><img src="/img/girisim-logo.png" alt="Girişim Elektrik"></span>
+      <span class="brand-text">
+        <span class="brand-name">Malzeme Takip</span>
+        <span class="brand-sub">Girişim Elektrik · Europower · Fabrika Stok Takibi</span>
+      </span>
+    </div>
+    <div class="top-right">
+      <div class="presence" id="presence" title="Şu an bağlı"></div>
+      <div class="live" id="live"><span class="dot"></span><span id="liveText">Bağlanıyor</span></div>
+      <div class="inbox-wrap" id="inboxWrap">
+        <button class="icon-btn settings-btn" id="inboxBtn" data-action="open-inbox" aria-label="Bildirimler" title="Bildirimler — son hareketler ve alarmlar" aria-haspopup="true" aria-expanded="false"><svg class="i" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0"/></svg><span class="todo-count inbox-count" id="inboxCount" hidden></span></button>
+      </div>
+      <button class="icon-btn settings-btn" id="settingsBtn" data-action="settings" aria-label="Ayarlar" title="Ayarlar"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg><span class="settings-dot" id="settingsDot" hidden></span></button>
+      <div class="me" id="meBox"></div>
+    </div>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <div id="alarmBar" class="alarm-bar" data-action="nav" data-view="alerts" hidden></div>
+  <div class="body">
+    <div class="backdrop" id="backdrop" data-action="toggle-rail"></div>
+    <aside class="rail" id="rail">
+      <div class="rail-head">
+        <input type="search" id="search" placeholder="Malzeme, kod, kategori ara" aria-label="Malzeme ara">
+        <div class="btn-row">
+          <button class="btn primary" data-action="new-movement" data-kind="in"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Giriş</button>
+          <button class="btn out-btn" data-action="new-movement" data-kind="out"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Sevkiyat</button>
+        </div>
+      </div>
+      <div class="chips" id="stateChips"></div>
+      <div class="rail-list" id="railList"></div>
+      <div class="rail-foot">
+        <label><input type="checkbox" id="showInactive"> Pasifleri göster</label>
+        <span id="matCount"></span>
+      </div>
+    </aside>
+    <main class="pane" id="pane">
+      <div class="pane-head" id="paneHead"></div>
+      <div class="pane-body" id="paneBody"></div>
+    </main>
+  </div>
+  <div class="inbox" id="inbox" role="dialog" aria-label="Bildirimler" hidden></div>
+  <div class="modal-root" id="modalRoot" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+  <div class="ntoast" id="ntoast" role="status" hidden></div>
+</div>
+<script src="/app.js?v=20261019"></script>
+<script src="/pwa.js?v=20261019"></script>
+</body>
+</html>

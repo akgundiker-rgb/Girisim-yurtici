@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Giriş · Malzeme Takip</title>
+<meta name="theme-color" content="#00204c">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Malzeme Takip">
+<meta name="application-name" content="Malzeme Takip">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2300204c'/%3E%3Cpath d='M18 5 9 18h6l-1 9 9-13h-6z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preload" href="/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=20261019">
+</head>
+<body>
+<div class="auth"><div class="auth-card">
+  <div class="auth-brand"><span class="brand-logo"><img src="/img/girisim-logo.png" alt="Girişim Elektrik"></span><span class="brand-name">Malzeme Takip</span><span class="brand-sub">Girişim Elektrik · Europower · Fabrika Stok Takibi</span></div>
+  <div id="view"><p class="muted small">Yükleniyor…</p></div>
+</div></div>
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  async function api(method, url, body){ const r = await fetch(url, {method, credentials:'same-origin', headers: body ? {'Content-Type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined}); let j = null; try { j = await r.json(); } catch(e){} if (!r.ok) throw (j && j.error) || {message:'İstek başarısız (' + r.status + ')'}; return j; }
+  const view = (h) => { $('view').innerHTML = h; };
+  const errBox = (msg) => { const e = $('err'); if (e){ e.textContent = msg; e.hidden = !msg; } };
+  const inviteToken = (location.pathname.match(/^\/invite\/([A-Za-z0-9_-]+)/) || [])[1];
+  const nextParam = new URLSearchParams(location.search).get('next');
+  const afterLogin = (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')) ? nextParam : '/';
+
+  function loginView(status){
+    view(`<h2>Giriş yapın</h2><form id="f"><div id="err" class="err" hidden></div>
+      <label class="f">E-posta<input type="email" id="email" autocomplete="username" required autofocus></label>
+      <label class="f">Şifre<input type="password" id="pw" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">Giriş yap</button>
+      <div class="links"><span>${status.mail ? '<a href="#" id="forgot">Şifrenizi mi unuttunuz?</a>' : 'Şifrenizi mi unuttunuz? Yöneticiden sıfırlama bağlantısı isteyin.'}</span></div></form>`);
+    $('f').addEventListener('submit', async (e) => { e.preventDefault(); errBox(''); try { await api('POST', '/api/login', {email:$('email').value.trim(), password:$('pw').value}); location.href = afterLogin; } catch(err){ errBox(err.message); } });
+    const fg = $('forgot'); if (fg) fg.addEventListener('click', async (e) => { e.preventDefault(); const email = $('email').value.trim(); if (!email){ errBox('Önce e-posta adresinizi girin.'); return; } try { await api('POST', '/api/forgot', {email}); view('<div class="info">Bu adrese kayıtlı bir hesap varsa sıfırlama bağlantısı gönderildi.</div>'); } catch(err){ errBox(err.message); } });
+  }
+  function setupView(status){
+    view(`${status.warning ? `<div class="err" style="margin-bottom:14px"><strong>Durun: veriler kalıcı olmayacak.</strong> ${esc(status.warning)}</div>` : ''}<h2>İlk yöneticiyi oluşturun</h2><p class="muted small" style="margin:0 0 12px">Bu adım bir kez yapılır. Yönetici, ekibin geri kalanını daha sonra davet eder.</p><form id="f"><div id="err" class="err" hidden></div>
+      <label class="f">Adınız<input type="text" id="name" required autofocus></label>
+      <label class="f">E-posta<input type="email" id="email" autocomplete="username" required></label>
+      <label class="f">Şifre (en az 8 karakter)<input type="password" id="pw" autocomplete="new-password" required minlength="8"></label>
+      <button class="btn primary" type="submit">Hesabı oluştur ve uygulamayı aç</button></form>`);
+    $('f').addEventListener('submit', async (e) => { e.preventDefault(); errBox(''); try { await api('POST', '/api/setup', {name:$('name').value.trim(), email:$('email').value.trim(), password:$('pw').value}); location.href = '/'; } catch(err){ errBox(err.message); } });
+  }
+  async function inviteView(){
+    let inv; try { inv = await api('GET', '/api/invite/' + inviteToken); } catch(err){ view(`<div class="err">${esc(err.message)}</div><div class="links" style="margin-top:12px"><a href="/login">Giriş sayfasına dön</a></div>`); return; }
+    view(`<h2>${inv.hasPassword ? 'Yeni şifre belirleyin' : 'Hoş geldiniz, ' + esc(inv.name)}</h2><p class="muted small" style="margin:0 0 12px">${inv.hasPassword ? esc(inv.email) + ' hesabı için yeni bir şifre seçin.' : 'Malzeme Takip uygulamasına davet edildiniz. Adınızı onaylayın ve ' + esc(inv.email) + ' hesabı için bir şifre seçin.'}</p><form id="f"><div id="err" class="err" hidden></div>
+      ${inv.hasPassword ? '' : `<label class="f">Adınız<input type="text" id="name" value="${esc(inv.name)}" required></label>`}
+      <label class="f">Şifre (en az 8 karakter)<input type="password" id="pw" autocomplete="new-password" required minlength="8" autofocus></label>
+      <label class="f">Şifre (tekrar)<input type="password" id="pw2" autocomplete="new-password" required></label>
+      <button class="btn primary" type="submit">${inv.hasPassword ? 'Şifreyi kaydet ve giriş yap' : 'Hesabımı oluştur'}</button></form>`);
+    $('f').addEventListener('submit', async (e) => { e.preventDefault(); errBox(''); if ($('pw').value !== $('pw2').value){ errBox('İki şifre birbirini tutmuyor.'); return; } try { await api('POST', '/api/invite/accept', {token:inviteToken, name:$('name') ? $('name').value.trim() : '', password:$('pw').value}); location.href = '/'; } catch(err){ errBox(err.message); } });
+  }
+  (async () => {
+    let status; try { status = await api('GET', '/api/status'); } catch(e){ view('<div class="err">Sunucuya ulaşılamıyor.</div>'); return; }
+    if (inviteToken) return inviteView();
+    if (status.needsSetup) return setupView(status);
+    if (status.me && location.pathname !== '/setup'){ location.href = afterLogin; return; }
+    if (location.pathname === '/setup'){ location.href = '/login'; return; }
+    loginView(status);
+  })();
+})();
+</script>
+<script src="/pwa.js?v=20261019"></script>
+</body>
+</html>

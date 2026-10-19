@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Çevrimdışı · Malzeme Takip</title>
+<meta name="theme-color" content="#00204c">
+<link rel="stylesheet" href="/styles.css?v=20261019">
+<style>
+  .offline{min-height:100%;display:flex;align-items:center;justify-content:center;padding:32px 16px;background:radial-gradient(1200px 600px at 50% -10%,var(--accent-soft),transparent 60%),var(--bg);text-align:center}
+  .offline-card{width:min(420px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:32px 28px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;align-items:center;gap:10px}
+  .offline-card img{height:40px;background:#fff;border-radius:10px;padding:6px 10px}
+  .offline-card h1{font-size:18px;margin-top:8px}
+  .offline-card p{margin:0;color:var(--muted)}
+  .offline-card .btn{margin-top:10px}
+</style>
+</head>
+<body>
+<div class="offline"><div class="offline-card">
+  <img src="/img/girisim-logo.png" alt="Girişim Elektrik">
+  <h1>Çevrimdışısınız</h1>
+  <p>Malzeme Takip, canlı stok seviyelerini ve hareketleri göstermek için bağlantıya ihtiyaç duyar. Wi-Fi veya mobil verinizi kontrol edip yeniden deneyin.</p>
+  <button class="btn primary" onclick="location.reload()">Yeniden dene</button>
+</div></div>
+<script>window.addEventListener('online', () => location.reload());</script>
+</body>
+</html>
