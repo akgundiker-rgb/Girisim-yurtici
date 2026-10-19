@@ -1,5 +1,5 @@
-/* Malzeme Takip — arayüz stilleri. International Desk ile aynı tasarım dili:
-   lacivert üst çubuk ve sol şerit, Inter yazı tipi, ince çizgilerle ayrılan kartlar, buzlu cam katmanlar;
+/* Malzeme Takip — arayüz stilleri. International Desk ile aynı tasarım dili, Peak PV Solar renkleriyle:
+   koyu petrol üst çubuk ve sol şerit, Inter yazı tipi, ince çizgilerle ayrılan kartlar, buzlu cam katmanlar;
    doygun renk yalnızca durum için (yeşil normal · amber yaklaşıyor · kırmızı limitin altında). */
 
 /* ---------- Fonts (served locally from /fonts, no external requests) ---------- */
@@ -19,31 +19,33 @@
 /* ---------- Design tokens ---------- */
 :root{
   /* Neutral near-white base; colour lives only inside the cards, as quiet stone/greige/slate tints. */
-  --bg:#f6f8fb;            /* work area — white with a breath of blue */
-  --rail:#f1f5fa;          /* channel column (the sidebar itself uses the navy chrome) */
+  --bg:#f5f8f8;            /* work area — white with a breath of teal */
+  --rail:#eff4f4;
   --surface:#ffffff;       /* cards, header, inputs */
-  --surface-2:#f1f5fa;     /* hover */
-  --surface-3:#e3eaf3;     /* tags, stronger fills */
-  --line:#dfe6ef;          /* hairlines */
-  --line-strong:#c3cfdd;   /* input borders */
+  --surface-2:#eff4f4;     /* hover */
+  --surface-3:#e0e9ea;     /* tags, stronger fills */
+  --line:#dde5e6;          /* hairlines */
+  --line-strong:#c0ced0;   /* input borders */
   --fg:#1c1c19;
   --fg-2:#3d3d39;
   --muted:#6c6c66;
-  --brand-navy:#00204c;    /* Girişim corporate navy */
-  --brand-red:#e2231a;     /* logo red — reserved for the mark and true alerts */
-  --accent:#12427f;        /* primary actions & links (navy tuned for contrast on white) */
-  --accent-hover:#0d3468;
+  --brand-navy:#0d232e;    /* Peak PV deep petrol (site footer / header) */
+  --brand-red:#e2231a;     /* reserved for true alerts (badge, limit) */
+  --brand-green:#7db834;   /* Peak PV green */
+  --brand-orange:#fe7129;  /* Peak PV orange (logo sun) */
+  --accent:#00719c;        /* primary actions & links — Peak PV teal-blue */
+  --accent-hover:#005f84;
   --accent-fg:#ffffff;
-  --accent-soft:#e7eef9;
-  --accent-ring:rgba(18,66,127,.22);
+  --accent-soft:#e3f1f6;
+  --accent-ring:rgba(0,113,156,.22);
   --ok:#2d7a3e;   --warn:#a5650f; --bad:#c22820; --info:#2a5db0; --teal:#1a7373; --violet:#6b3fa0;
   --ok-soft:#e3f2e6; --warn-soft:#fbeed6; --bad-soft:#fbe4e2; --info-soft:#e4ecfa; --teal-soft:#dcefef; --violet-soft:#ece4f7; --muted-soft:#e9eef4;
   /* card tints — depths of ice blue; every card family stays distinguishable while the whole screen reads as one navy-and-white interface */
-  --tint-cream:#f3f7fc; --tint-sand:#eaf1f9; --tint-apricot:#e7eef8; --tint-sage:#eef5fb; --tint-rose:#edf2f8; --tint-sky:#e1ecf8; --tint-stone:#f0f4f9;
-  --edge-cream:#cfdff0; --edge-sand:#c3d6ec; --edge-apricot:#bfd2ea; --edge-sage:#c9dcef; --edge-rose:#c6d6ea; --edge-sky:#b3cbe8; --edge-stone:#cbdaec;
-  --ink-cream:#1f3f6e; --ink-sand:#1f3f6e; --ink-apricot:#1f3f6e; --ink-sage:#1f3f6e; --ink-rose:#1f3f6e; --ink-sky:#1f3f6e; --ink-stone:#1f3f6e;
-  /* chrome — the navy header and sidebar (Girişim corporate navy) */
-  --chrome:#00204c; --chrome-2:#0f2a52; --chrome-3:#163a6b; --chrome-4:#1f4a82; --chrome-line:#1b3f70; --chrome-fg:#ffffff; --chrome-fg-2:#dbe4f0; --chrome-muted:#9fb3cf; --chrome-accent:#8fb4ee; --chrome-btn:#2d6cdf; --chrome-bad:#ff8f86;
+  --tint-cream:#f2f8f9; --tint-sand:#fbf3ea; --tint-apricot:#fdf1e8; --tint-sage:#f0f7ea; --tint-rose:#fbeeec; --tint-sky:#e3f1f6; --tint-stone:#eff5f6;
+  --edge-cream:#cfe3e8; --edge-sand:#eed9c3; --edge-apricot:#f3d3bd; --edge-sage:#cfe4bd; --edge-rose:#efcfc9; --edge-sky:#b8d8e4; --edge-stone:#cbdfe3;
+  --ink-cream:#0e4a5e; --ink-sand:#7a4a1c; --ink-apricot:#7a4a1c; --ink-sage:#3f6a1a; --ink-rose:#8a2e26; --ink-sky:#0e4a5e; --ink-stone:#0e4a5e;
+  /* chrome — the deep petrol header and sidebar (Peak PV Solar) */
+  --chrome:#0d232e; --chrome-2:#122d3a; --chrome-3:#1a3d4c; --chrome-4:#224d5f; --chrome-line:#1d4251; --chrome-fg:#ffffff; --chrome-fg-2:#d9e6ea; --chrome-muted:#8fb0bb; --chrome-accent:#7fd0ea; --chrome-btn:#0a8ab8; --chrome-bad:#ff8f86;
   --shadow-sm:0 1px 2px rgba(20,20,18,.06);
   --shadow:0 1px 2px rgba(20,20,18,.06),0 6px 20px rgba(20,20,18,.08);
   --shadow-lg:0 2px 6px rgba(20,20,18,.08),0 24px 60px rgba(20,20,18,.18);
@@ -56,13 +58,13 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#111419; --rail:#171b22; --surface:#1b2028; --surface-2:#232932; --surface-3:#2d343f; --line:#2a303a; --line-strong:#3b4350;
+    --bg:#0f1417; --rail:#141b1f; --surface:#182024; --surface-2:#1f292e; --surface-3:#29353b; --line:#263136; --line-strong:#37454c;
     --fg:#ededea; --fg-2:#c9c9c4; --muted:#9a9a94;
-    --tint-cream:#1d2432; --tint-sand:#1f2736; --tint-apricot:#20283a; --tint-sage:#1c2331; --tint-rose:#1e2533; --tint-sky:#1e2a3e; --tint-stone:#1d2533;
-    --edge-cream:#2d3a52; --edge-sand:#2f3d57; --edge-apricot:#31405b; --edge-sage:#2c3850; --edge-rose:#2e3b53; --edge-sky:#33436a; --edge-stone:#2e3b54;
-    --ink-cream:#a9c4ea; --ink-sand:#a9c4ea; --ink-apricot:#a9c4ea; --ink-sage:#a9c4ea; --ink-rose:#a9c4ea; --ink-sky:#a9c4ea; --ink-stone:#a9c4ea;
-    --chrome:#0a1628; --chrome-2:#0d1b31; --chrome-3:#15274a; --chrome-4:#1d3460; --chrome-line:#1a2d4f; --chrome-fg:#ffffff; --chrome-fg-2:#d3dced; --chrome-muted:#8fa3c2; --chrome-accent:#8fb4ee; --chrome-btn:#2d6cdf; --chrome-bad:#ff8f86;
-    --accent:#6f9fe6; --accent-hover:#88b1ee; --accent-fg:#0b1526; --accent-soft:#1f2c42; --accent-ring:rgba(111,159,230,.35);
+    --tint-cream:#182a31; --tint-sand:#2a241c; --tint-apricot:#2c241b; --tint-sage:#1d2a1a; --tint-rose:#2d2020; --tint-sky:#172c36; --tint-stone:#1a272d;
+    --edge-cream:#254350; --edge-sand:#45392a; --edge-apricot:#4a3a28; --edge-sage:#2f4428; --edge-rose:#4a3030; --edge-sky:#244a5a; --edge-stone:#283f48;
+    --ink-cream:#8fcfe3; --ink-sand:#e3b88a; --ink-apricot:#e3b88a; --ink-sage:#a8d47a; --ink-rose:#e59a90; --ink-sky:#8fcfe3; --ink-stone:#8fcfe3;
+    --chrome:#081820; --chrome-2:#0b1f29; --chrome-3:#123039; --chrome-4:#193f4b; --chrome-line:#143540; --chrome-fg:#ffffff; --chrome-fg-2:#d3e1e6; --chrome-muted:#86a6b0; --chrome-accent:#7fd0ea; --chrome-btn:#0a8ab8; --chrome-bad:#ff8f86;
+    --accent:#5fc0e0; --accent-hover:#7fd0ea; --accent-fg:#071a22; --accent-soft:#17323d; --accent-ring:rgba(95,192,224,.35);
     --ok:#6cc48a; --warn:#e3b04f; --bad:#ef7368; --info:#8db0f0; --teal:#5fc0bf; --violet:#b79be6;
     --ok-soft:#1c3324; --warn-soft:#3a2e13; --bad-soft:#3f201d; --info-soft:#1e2b44; --teal-soft:#173333; --violet-soft:#2b2340; --muted-soft:#2a2b30;
     --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.45); --shadow-lg:0 2px 8px rgba(0,0,0,.5),0 30px 70px rgba(0,0,0,.6);
@@ -70,13 +72,13 @@
   }
 }
 :root[data-theme="dark"]{
-  --bg:#111419; --rail:#171b22; --surface:#1b2028; --surface-2:#232932; --surface-3:#2d343f; --line:#2a303a; --line-strong:#3b4350;
+  --bg:#0f1417; --rail:#141b1f; --surface:#182024; --surface-2:#1f292e; --surface-3:#29353b; --line:#263136; --line-strong:#37454c;
   --fg:#ededea; --fg-2:#c9c9c4; --muted:#9a9a94;
-  --tint-cream:#1d2432; --tint-sand:#1f2736; --tint-apricot:#20283a; --tint-sage:#1c2331; --tint-rose:#1e2533; --tint-sky:#1e2a3e; --tint-stone:#1d2533;
-  --edge-cream:#2d3a52; --edge-sand:#2f3d57; --edge-apricot:#31405b; --edge-sage:#2c3850; --edge-rose:#2e3b53; --edge-sky:#33436a; --edge-stone:#2e3b54;
-  --ink-cream:#a9c4ea; --ink-sand:#a9c4ea; --ink-apricot:#a9c4ea; --ink-sage:#a9c4ea; --ink-rose:#a9c4ea; --ink-sky:#a9c4ea; --ink-stone:#a9c4ea;
-  --chrome:#0a1628; --chrome-2:#0d1b31; --chrome-3:#15274a; --chrome-4:#1d3460; --chrome-line:#1a2d4f; --chrome-fg:#ffffff; --chrome-fg-2:#d3dced; --chrome-muted:#8fa3c2; --chrome-accent:#8fb4ee; --chrome-btn:#2d6cdf; --chrome-bad:#ff8f86;
-  --accent:#6f9fe6; --accent-hover:#88b1ee; --accent-fg:#0b1526; --accent-soft:#1f2c42; --accent-ring:rgba(111,159,230,.35);
+  --tint-cream:#182a31; --tint-sand:#2a241c; --tint-apricot:#2c241b; --tint-sage:#1d2a1a; --tint-rose:#2d2020; --tint-sky:#172c36; --tint-stone:#1a272d;
+  --edge-cream:#254350; --edge-sand:#45392a; --edge-apricot:#4a3a28; --edge-sage:#2f4428; --edge-rose:#4a3030; --edge-sky:#244a5a; --edge-stone:#283f48;
+  --ink-cream:#8fcfe3; --ink-sand:#e3b88a; --ink-apricot:#e3b88a; --ink-sage:#a8d47a; --ink-rose:#e59a90; --ink-sky:#8fcfe3; --ink-stone:#8fcfe3;
+  --chrome:#081820; --chrome-2:#0b1f29; --chrome-3:#123039; --chrome-4:#193f4b; --chrome-line:#143540; --chrome-fg:#ffffff; --chrome-fg-2:#d3e1e6; --chrome-muted:#86a6b0; --chrome-accent:#7fd0ea; --chrome-btn:#0a8ab8; --chrome-bad:#ff8f86;
+  --accent:#5fc0e0; --accent-hover:#7fd0ea; --accent-fg:#071a22; --accent-soft:#17323d; --accent-ring:rgba(95,192,224,.35);
   --ok:#6cc48a; --warn:#e3b04f; --bad:#ef7368; --info:#8db0f0; --teal:#5fc0bf; --violet:#b79be6;
   --ok-soft:#1c3324; --warn-soft:#3a2e13; --bad-soft:#3f201d; --info-soft:#1e2b44; --teal-soft:#173333; --violet-soft:#2b2340; --muted-soft:#2a2b30;
   --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.45); --shadow-lg:0 2px 8px rgba(0,0,0,.5),0 30px 70px rgba(0,0,0,.6);
@@ -117,8 +119,8 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance;letter-spacing:-.01em}
 .top .settings-dot,.top .todo-count{border-color:var(--chrome)}
 .top .menu,.top .menu button{color:var(--fg)} .top .menu .muted{color:var(--muted)} .top .menu button svg.i{color:var(--accent)} .top .menu button:hover{background:var(--surface-2);color:var(--fg)}
 .brand{display:flex;align-items:center;gap:14px;line-height:1.15;min-width:0}
-.brand-logo{display:inline-flex;align-items:center;background:#fff;border-radius:8px;padding:4px 8px;flex:none}
-.brand-logo img{height:28px;width:auto;display:block}
+.brand-logo{display:inline-flex;align-items:center;background:transparent;border-radius:8px;padding:2px 0;flex:none}
+.brand-logo img{height:34px;width:auto;display:block}
 .brand-text{display:flex;flex-direction:column;min-width:0;padding-left:14px;border-left:1px solid var(--line)}
 .brand-name{font-weight:600;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
 .brand-sub{font-size:11px;color:var(--muted);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -143,7 +145,7 @@ h1,h2,h3,h4{margin:0;font-weight:600;text-wrap:balance;letter-spacing:-.01em}
 .rail{width:296px;flex:none;background:var(--chrome-2);border-right:1px solid var(--chrome-2);color:var(--chrome-fg-2);display:flex;flex-direction:column;min-height:0}
 .rail .rail-section{color:var(--chrome-muted)}
 .rail .rail-head input{background-color:var(--chrome-3);border-color:var(--chrome-3);color:var(--chrome-fg)} .rail .rail-head input::placeholder{color:var(--chrome-muted)} .rail .rail-head input:focus{border-color:var(--chrome-accent);box-shadow:none}
-.rail .btn.primary{background:var(--chrome-btn);border-color:var(--chrome-btn)} .rail .btn.primary:hover{background:#3b7be8;border-color:#3b7be8}
+.rail .btn.primary{background:var(--chrome-btn);border-color:var(--chrome-btn)} .rail .btn.primary:hover{background:#1399c9;border-color:#1399c9}
 .rail .chip{color:var(--chrome-fg-2)} .rail .chip:hover{background:var(--chrome-3);color:var(--chrome-fg)} .rail .chip.on{background:var(--chrome-4);color:var(--chrome-fg)}
 .rail .chip.on .gdot{box-shadow:0 0 0 2px var(--chrome-4)}
 .rail .home-row .prow{color:var(--chrome-fg-2)} .rail .home-row .prow .pname{color:var(--chrome-fg)} .rail .home-row .prow .pmeta{color:var(--chrome-muted)}
@@ -362,7 +364,7 @@ table.team td.acts{white-space:nowrap;text-align:right}
 .auth{min-height:100%;display:flex;align-items:center;justify-content:center;padding:32px 16px;background:radial-gradient(1200px 600px at 50% -10%,var(--accent-soft),transparent 60%),var(--bg)}
 .auth-card{width:min(430px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:32px 32px 28px;box-shadow:var(--shadow-lg)}
 .auth-brand{display:flex;flex-direction:column;gap:12px;margin-bottom:26px;padding-bottom:22px;border-bottom:1px solid var(--line)}
-.auth-brand .brand-logo{align-self:flex-start;padding:6px 10px;background:#fff;border-radius:10px}
+.auth-brand .brand-logo{align-self:flex-start;padding:8px 14px;background:var(--brand-navy);border-radius:10px}
 .auth-brand .brand-logo img{height:40px}
 .auth-brand .brand-name{font-size:20px;font-weight:600;letter-spacing:-.02em}
 .auth-brand .brand-sub{font-size:12px;letter-spacing:.01em;color:var(--muted);white-space:normal}
@@ -399,7 +401,7 @@ table.team td.acts{white-space:nowrap;text-align:right}
   .msgs{padding:10px 12px}
   .top{gap:8px;padding:0 10px;height:52px}
   .brand{gap:10px}
-  .brand-logo img{height:22px}
+  .brand-logo img{height:26px}
   .brand-text{padding-left:10px}
   .brand-name{font-size:14px;white-space:nowrap}
   .brand-sub{display:none}
@@ -425,8 +427,8 @@ table.team td.acts{white-space:nowrap;text-align:right}
   .top{overflow:hidden;padding:0 10px 0 8px;gap:8px}
   .top-right{gap:4px}
   .presence{display:none}
-  .brand-logo img{height:20px}
-  .brand-logo{padding:3px 6px}
+  .brand-logo img{height:24px}
+  .brand-logo{padding:0}
   .me > button{padding:4px}
 }
 @media (prefers-reduced-motion: reduce){
@@ -449,7 +451,7 @@ table.team td.acts{white-space:nowrap;text-align:right}
 /* ---------- Settings ---------- */
 /* ---------- Settings ---------- */
 .settings-btn{position:relative}
-.settings-dot{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--brand-red);border:2px solid var(--surface);box-sizing:content-box}
+.settings-dot{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:var(--brand-orange);border:2px solid var(--surface);box-sizing:content-box}
 .settings{display:flex;flex-direction:column;gap:6px}
 .set-section{padding:16px 0;border-top:1px solid var(--line)}
 .set-section:first-child{border-top:0;padding-top:4px}
@@ -521,22 +523,22 @@ table.team td.acts{white-space:nowrap;text-align:right}
    The work area keeps its white base; translucency only signals layering (header, sidebar, cards, dialogs). Browsers
    without backdrop-filter, and people who ask for reduced transparency, get the solid colours above unchanged. */
 :root{
-  --glow-a:rgba(96,150,240,.50); --glow-b:rgba(56,176,200,.36); --glow-c:#d3e2fb; --glow-d:#dbe6f7;
-  --glass-top:rgba(0,30,72,.74); --glass-rail:rgba(10,34,72,.68); --glass-edge:rgba(255,255,255,.12);
-  --glass-head:rgba(255,255,255,.62); --glass-card:rgba(255,255,255,.62); --glass-tint:rgba(236,243,252,.60); --glass-card-edge:rgba(255,255,255,.80);
-  --glass-modal:rgba(255,255,255,.90); --glass-scrim:rgba(8,20,44,.38); --glass-menu:rgba(255,255,255,.88); --glass-shadow:0 10px 32px -22px rgba(0,32,76,.38),0 1px 0 rgba(255,255,255,.9) inset;
+  --glow-a:rgba(0,150,200,.42); --glow-b:rgba(125,184,52,.30); --glow-c:#d6ecf1; --glow-d:#e6f1dc;
+  --glass-top:rgba(13,35,46,.78); --glass-rail:rgba(18,45,58,.70); --glass-edge:rgba(255,255,255,.12);
+  --glass-head:rgba(255,255,255,.62); --glass-card:rgba(255,255,255,.62); --glass-tint:rgba(238,246,247,.60); --glass-card-edge:rgba(255,255,255,.80);
+  --glass-modal:rgba(255,255,255,.90); --glass-scrim:rgba(8,28,38,.38); --glass-menu:rgba(255,255,255,.88); --glass-shadow:0 10px 32px -22px rgba(0,40,56,.38),0 1px 0 rgba(255,255,255,.9) inset;
 }
 :root[data-theme="dark"]{
-  --glow-a:rgba(58,110,205,.30); --glow-b:rgba(40,140,165,.22); --glow-c:#141c2b; --glow-d:#121824;
-  --glass-top:rgba(10,22,40,.74); --glass-rail:rgba(13,27,49,.70); --glass-edge:rgba(255,255,255,.08);
-  --glass-head:rgba(27,32,40,.62); --glass-card:rgba(27,32,40,.64); --glass-tint:rgba(30,38,54,.62); --glass-card-edge:rgba(255,255,255,.08);
-  --glass-modal:rgba(27,32,40,.92); --glass-scrim:rgba(4,8,16,.55); --glass-menu:rgba(27,32,40,.92); --glass-shadow:0 12px 36px -22px rgba(0,0,0,.7),0 1px 0 rgba(255,255,255,.05) inset;
+  --glow-a:rgba(0,130,175,.28); --glow-b:rgba(125,184,52,.16); --glow-c:#13242b; --glow-d:#141f1b;
+  --glass-top:rgba(8,24,32,.76); --glass-rail:rgba(11,31,41,.72); --glass-edge:rgba(255,255,255,.08);
+  --glass-head:rgba(24,32,36,.62); --glass-card:rgba(24,32,36,.64); --glass-tint:rgba(28,40,46,.62); --glass-card-edge:rgba(255,255,255,.08);
+  --glass-modal:rgba(24,32,36,.92); --glass-scrim:rgba(4,10,14,.55); --glass-menu:rgba(24,32,36,.92); --glass-shadow:0 12px 36px -22px rgba(0,0,0,.7),0 1px 0 rgba(255,255,255,.05) inset;
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
-  --glow-a:rgba(58,110,205,.30); --glow-b:rgba(40,140,165,.22); --glow-c:#141c2b; --glow-d:#121824;
-  --glass-top:rgba(10,22,40,.74); --glass-rail:rgba(13,27,49,.70); --glass-edge:rgba(255,255,255,.08);
-  --glass-head:rgba(27,32,40,.62); --glass-card:rgba(27,32,40,.64); --glass-tint:rgba(30,38,54,.62); --glass-card-edge:rgba(255,255,255,.08);
-  --glass-modal:rgba(27,32,40,.92); --glass-scrim:rgba(4,8,16,.55); --glass-menu:rgba(27,32,40,.92); --glass-shadow:0 12px 36px -22px rgba(0,0,0,.7),0 1px 0 rgba(255,255,255,.05) inset;
+  --glow-a:rgba(0,130,175,.28); --glow-b:rgba(125,184,52,.16); --glow-c:#13242b; --glow-d:#141f1b;
+  --glass-top:rgba(8,24,32,.76); --glass-rail:rgba(11,31,41,.72); --glass-edge:rgba(255,255,255,.08);
+  --glass-head:rgba(24,32,36,.62); --glass-card:rgba(24,32,36,.64); --glass-tint:rgba(28,40,46,.62); --glass-card-edge:rgba(255,255,255,.08);
+  --glass-modal:rgba(24,32,36,.92); --glass-scrim:rgba(4,10,14,.55); --glass-menu:rgba(24,32,36,.92); --glass-shadow:0 12px 36px -22px rgba(0,0,0,.7),0 1px 0 rgba(255,255,255,.05) inset;
 } }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
   body{background:radial-gradient(520px 420px at 6% 18%,var(--glow-a) 0%,transparent 62%),radial-gradient(640px 460px at 26% 96%,var(--glow-b) 0%,transparent 60%),radial-gradient(1100px 620px at 85% -10%,var(--glow-c) 0%,transparent 60%),radial-gradient(800px 520px at 100% 100%,var(--glow-d) 0%,transparent 55%),var(--bg);background-attachment:fixed}

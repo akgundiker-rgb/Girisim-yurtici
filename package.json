@@ -1,7 +1,7 @@
 {
   "name": "malzeme-takip",
   "version": "1.0.0",
-  "description": "Fabrika malzeme giriş / sevkiyat takibi — canlı stok seviyeleri, minimum stok alarmı ve her hareket için PDF fişi. Kendi girişi, kendi veritabanı.",
+  "description": "Peak PV Solar — fabrika malzeme giriş / sevkiyat takibi: canlı stok seviyeleri, minimum stok alarmı ve her hareket için PDF fişi. Kendi girişi, kendi veritabanı.",
   "private": true,
   "main": "server.js",
   "engines": {

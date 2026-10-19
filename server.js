@@ -82,7 +82,7 @@ app.use('/api', jsonOnly);
 
 // ---------- ayarlar (şirket bilgisi, alarm davranışı) ----------
 const DEFAULT_SETTINGS = {
-  company: { name: 'Girişim Elektrik Sanayi Taahhüt ve Ticaret A.Ş.', address: 'Saray Mah. Atom Cad. No:15 Kahramankazan / ANKARA', line2: 'Europower Enerji ve Otomasyon Teknolojileri San. Tic. A.Ş.' },
+  company: { name: 'Peak PV Solar', address: 'ASO 2 OSB Şubesi Alcı OSB Mah. 2033 Cad. No:16 Sincan / ANKARA', line2: 'Tel: 444 73 40 · info@peakpvsolar.com · www.peakpvsolar.com' },
   allowNegative: false,
   alertEmails: '',          // ek alıcılar (virgülle)
   alertPushAll: true,       // alarmı anlık bildirim olarak tüm kullanıcılara gönder
