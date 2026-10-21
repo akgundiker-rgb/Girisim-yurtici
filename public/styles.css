@@ -714,3 +714,164 @@ datalist{display:none}
 .card h3{justify-content:flex-start} .card h3 > .btn,.card h3 > .pill,.card h3 > .mono{margin-left:auto} .card h3 > .mono + .btn{margin-left:0}
 .card.flush{padding:0;overflow:hidden} .card.flush h3{padding:16px 20px 0}
 .tile .l{display:block;line-height:1.35} .tile .l::before{display:inline-block;margin-right:7px;vertical-align:1px}
+
+/* ---------- Üst çubuk rozetleri (bildirim ve sohbet sayaçları) ---------- */
+.todo-count{position:absolute;top:2px;right:2px;min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:var(--accent);color:#fff;font-size:10.5px;font-weight:700;line-height:17px;text-align:center;border:2px solid var(--surface);box-sizing:content-box;font-family:var(--font-mono)}
+.chat-count{background:var(--brand-orange);color:#1b0b09}
+.rail .prow .pname .nbadge.chat{background:var(--brand-orange)}
+
+/* ---------- Sohbet (International Desk ile aynı düzen: kanal sütunu + mesaj akışı + yazma alanı) ---------- */
+.chat{display:flex;flex:1;min-height:0}
+.channels{width:224px;flex:none;border-right:1px solid var(--line);background:var(--rail);display:flex;flex-direction:column;min-height:0}
+.channels .rail-section{padding:14px 12px 6px;color:var(--muted)}
+.chlist{overflow-y:auto;flex:1;min-height:0;padding:0 8px 8px}
+.chrow{display:flex;align-items:center;gap:6px;width:100%;text-align:left;border:1px solid transparent;background:none;padding:6px 8px;border-radius:7px;color:var(--muted);min-width:0;transition:background .12s var(--ease),color .12s var(--ease)}
+.chrow svg.i{opacity:.7}
+.chrow:hover{background:var(--surface-3);color:var(--fg)}
+.chrow.on{background:var(--surface);color:var(--fg);font-weight:500;border-color:var(--line);box-shadow:var(--shadow-sm)}
+.chrow.on svg.i{opacity:1;color:var(--accent)}
+.chrow .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chrow .cnt{font-size:10.5px;background:var(--brand-orange);color:#1b0b09;border-radius:999px;padding:0 6px;font-weight:700;line-height:16px;font-family:var(--font-mono)}
+.chrow.arch{font-style:italic}
+.chat-main{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--surface);position:relative}
+.chan-head{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;min-height:52px}
+.chan-head .cn{font-weight:600;display:flex;align-items:center;gap:4px;letter-spacing:-.01em}
+.chan-head .cn svg.i{color:var(--muted)}
+.chan-head .ct{color:var(--muted);font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chan-head .cs{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.chan-head input{width:200px;padding:5px 10px;font-size:13px;border-radius:999px;background:var(--surface-2);border-color:transparent}
+.chan-head input:focus{background:var(--surface);border-color:var(--accent)}
+.msgs{flex:1;overflow-y:auto;min-height:0;padding:14px 20px;display:flex;flex-direction:column;gap:2px}
+.msgs .older{align-self:center;margin:4px 0 10px}
+.daysep{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin:18px 0 6px;font-weight:500}
+.daysep::before,.daysep::after{content:"";flex:1;border-top:1px solid var(--line)}
+.mgroup{display:grid;grid-template-columns:34px minmax(0,1fr);gap:0 12px;margin-top:14px;align-items:start}
+.mgroup .av{margin-top:2px}
+.mhead{display:flex;gap:8px;align-items:baseline;min-width:0}
+.mhead .who{font-weight:600;letter-spacing:-.01em}
+.mhead .when{font-size:11px;color:var(--muted);font-family:var(--font-mono)}
+.msg{position:relative;padding:3px 8px 3px 6px;margin-left:-6px;border-radius:6px;min-width:0}
+.msg:hover{background:var(--surface-2)}
+.msg.mention{background:var(--tint-sand);box-shadow:inset 3px 0 0 var(--brand-orange)}
+.msg-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
+.msg-text code{font-family:var(--font-mono);font-size:.92em;background:var(--surface-3);border-radius:4px;padding:1px 5px}
+.msg-text .mn{color:var(--accent);font-weight:600;background:var(--accent-soft);border-radius:4px;padding:0 3px}
+.msg .ed{font-size:11px;color:var(--muted);margin-left:4px}
+.msg .acts{position:absolute;right:6px;top:-12px;display:none;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:2px;box-shadow:var(--shadow);z-index:2}
+.msg:hover .acts{display:flex}
+.msg .acts .icon-btn{padding:3px}
+.msg .edit textarea{min-height:60px}
+.msg .edit .r{display:flex;gap:6px;margin-top:6px;font-size:12px}
+.typing{height:18px;padding:0 20px;font-size:12px;color:var(--muted);font-style:italic}
+.composer{display:flex;gap:8px;padding:12px 20px 6px;border-top:1px solid var(--line);align-items:flex-end}
+.composer textarea{min-height:42px;max-height:200px;flex:1;resize:none;line-height:1.45;border-radius:10px;padding:10px 14px;background:var(--surface-2);border-color:transparent}
+.composer textarea:focus{background:var(--surface);border-color:var(--accent)}
+.composer .btn.primary{border-radius:10px;padding:9px 12px}
+.hint{font-size:11px;color:var(--muted);padding:0 20px 10px}
+.archived-note{padding:12px 18px;border-top:1px solid var(--line);background:var(--surface-2);font-size:13px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mention-menu{position:absolute;left:68px;bottom:100%;margin-bottom:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-lg);padding:4px;min-width:220px;z-index:6}
+.mention-menu button{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:none;padding:6px 10px;border-radius:6px}
+.mention-menu button:hover,.mention-menu button.on{background:var(--surface-2)}
+.composer-wrap{position:relative}
+
+/* Sohbet ekleri: fotoğraflar ve dosyalar */
+.attach-btn{flex:none;width:42px;height:42px;display:inline-flex;align-items:center;justify-content:center;border:1px solid transparent;border-radius:10px;background:var(--surface-2);color:var(--muted);cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease)}
+.attach-btn:hover{background:var(--surface-3);color:var(--fg)}
+.attach-btn .i{width:20px;height:20px}
+.att-strip{display:flex;gap:10px;flex-wrap:wrap;padding:10px 20px 0;border-top:1px solid var(--line)}
+.att-strip + .composer{border-top:0;padding-top:8px}
+.att-item{position:relative;display:flex;align-items:center;gap:10px;width:min(100%,260px);padding:6px 8px 6px 6px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.att-item img,.att-item .att-ico{width:44px;height:44px;flex:none;border-radius:7px;object-fit:cover;background:var(--surface-2)}
+.att-item .att-ico{display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+.att-item .att-ico .i{width:22px;height:22px}
+.att-meta{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;font-size:12px}
+.att-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.att-sub{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.att-bar{display:block;height:3px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin-top:2px}
+.att-bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s linear}
+.att-item.done .att-bar i{background:var(--ok);width:100%}
+.att-item.uploading .att-bar i{width:40%;background:var(--accent);animation:attpulse 1s ease-in-out infinite alternate}
+.att-item.error{border-color:rgba(194,40,32,.4);background:rgba(194,40,32,.07)}
+.att-item.error .att-sub{color:var(--bad)}
+@keyframes attpulse{from{opacity:.4;width:20%}to{opacity:1;width:80%}}
+.att-x{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:var(--shadow)}
+.att-x:hover{color:var(--bad);border-color:var(--bad)}
+.att-x .i{width:12px;height:12px}
+#sendBtn.busy{opacity:.6;pointer-events:none}
+.chat-main.drop-on::after{content:"Eklemek için fotoğraf veya dosyayı buraya bırakın";position:absolute;inset:8px;z-index:5;display:flex;align-items:center;justify-content:center;border:2px dashed var(--accent);border-radius:14px;background:color-mix(in srgb,var(--accent-soft) 92%,transparent);color:var(--accent);font-weight:600;font-size:15px;pointer-events:none}
+.msg-photos{display:grid;gap:6px;margin:4px 0 2px;max-width:420px}
+.msg-photos.n1{grid-template-columns:minmax(0,1fr)}
+.msg-photos.n2,.msg-photos.n4{grid-template-columns:repeat(2,minmax(0,1fr))}
+.msg-photos.n3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.msg-photos .photo{display:block;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2);cursor:zoom-in;width:100%;max-height:360px}
+.msg-photos.n2 .photo,.msg-photos.n3 .photo,.msg-photos.n4 .photo{aspect-ratio:1/1!important;max-height:none}
+.msg-photos .photo img{display:block;width:100%;height:100%;object-fit:cover;max-height:360px;transition:transform .2s var(--ease)}
+.msg-photos.n1 .photo img{height:auto;object-fit:contain;background:var(--surface-2)}
+.msg-photos .photo:hover img{transform:scale(1.02)}
+.msg-files{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 2px}
+.file-chip{display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:6px 6px 6px 10px;max-width:min(100%,320px)}
+.file-chip .fc-main{display:flex;align-items:center;gap:10px;min-width:0;color:var(--fg);text-decoration:none}
+.file-chip .fc-main:hover .fc-name{color:var(--accent);text-decoration:underline}
+.file-chip .fc-main > .i{width:22px;height:22px;color:var(--accent);flex:none}
+.fc-meta{display:flex;flex-direction:column;min-width:0;font-size:13px;line-height:1.3}
+.fc-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fc-sub{font-size:11px;color:var(--muted)}
+.fc-dl{flex:none;color:var(--muted)} .fc-dl:hover{color:var(--fg)}
+.lightbox{position:fixed;inset:0;z-index:80;background:rgba(10,12,18,.97);display:flex;flex-direction:column;animation:fade .15s var(--ease);color:#fff}
+.lightbox[hidden]{display:none}
+body.lb-open{overflow:hidden}
+.lb-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px))}
+.lb-title{display:flex;flex-direction:column;min-width:0;font-size:13px;line-height:1.4}
+.lb-title strong{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-title .muted{color:rgba(255,255,255,.62)}
+.lb-actions{display:flex;gap:4px;flex:none}
+.lb-actions .icon-btn{color:#fff;opacity:.85;padding:8px;border-radius:8px}
+.lb-actions .icon-btn:hover{background:rgba(255,255,255,.12);opacity:1}
+.lb-actions .icon-btn .i{width:20px;height:20px}
+.lb-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:8px 56px 24px;cursor:zoom-out}
+.lb-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,.5);cursor:default}
+.lb-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.lb-nav:hover{background:rgba(255,255,255,.22)} .lb-nav[disabled]{opacity:.25;cursor:default}
+.lb-nav.prev{left:10px} .lb-nav.next{right:10px} .lb-nav .i{width:22px;height:22px}
+.lb-count{position:absolute;bottom:calc(10px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);font-size:12px;color:rgba(255,255,255,.7)}
+.chat-pane .pane-head{padding-bottom:12px}
+.del-card{display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.del-card:first-child{border-top:0}
+.del-card .grow{flex:1;min-width:0}
+@media (max-width: 900px){
+  .attach-btn{width:38px;height:38px}
+  .att-strip{padding:8px 12px 0;gap:8px}
+  .att-item{width:min(100%,220px);padding:5px 6px}
+  .att-item img,.att-item .att-ico{width:38px;height:38px}
+  .msg-photos{max-width:100%}
+  .lb-stage{padding:8px 8px 40px}
+  .lb-nav{width:38px;height:38px;top:auto;bottom:calc(8px + env(safe-area-inset-bottom,0px));transform:none}
+  .lb-nav.prev{left:12px} .lb-nav.next{right:12px}
+  .mention-menu{left:12px;right:12px}
+  .chat-pane .pane-head{display:none}
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
+  .chat-main{background:var(--glass-card)} .channels{background:var(--glass-tint)}
+}
+/* Sohbet — telefon düzeni (yukarıdaki genel sohbet kuralları bu bloktan önce geldiği için burada yinelenir) */
+.msg-photos.n1 .photo{width:fit-content;max-width:100%}
+.msg-photos.n1 .photo img{width:auto;max-width:100%;max-height:360px;min-width:120px}
+@media (max-width: 900px){
+  .chat{flex-direction:column}
+  .channels{width:auto;max-height:none;flex-direction:row;align-items:center;gap:2px;padding:6px 8px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+  .channels::-webkit-scrollbar{display:none}
+  .channels .rail-section{padding:0 6px 0 2px;flex:none;gap:4px}
+  .channels .rail-section > span:first-child{display:none}
+  .chlist{display:flex;gap:2px;padding:0;overflow:visible;flex:none;align-items:center}
+  .chlist .rail-section{padding:0 6px 0 10px}
+  .chlist .rail-section .mono{display:none}
+  .chrow{white-space:nowrap;padding:4px 8px}
+  .chan-head{padding:8px 12px;min-height:0;gap:6px}
+  .chan-head .ct{display:none}
+  .chan-head .cs{margin-left:auto}
+  .chan-head input{width:120px}
+  .hint{display:none}
+  .composer{padding:8px 12px 10px}
+  .msgs{padding:10px 12px}
+  .mgroup{grid-template-columns:30px minmax(0,1fr);gap:0 10px}
+}

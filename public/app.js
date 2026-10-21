@@ -35,6 +35,16 @@
     chart: '<svg class="i" viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l4-5 3 3 5-7"/></svg>',
     logout: '<svg class="i" viewBox="0 0 24 24"><path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/></svg>',
     key: '<svg class="i" viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="M11 11l9-9M16 6l3 3M13 9l3 3"/></svg>',
+    chat: '<svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+    hash: '<svg class="i" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3 15h16"/></svg>',
+    paperclip: '<svg class="i" viewBox="0 0 24 24"><path d="M20 11l-8.5 8.5a5 5 0 01-7-7L13 4a3.3 3.3 0 014.7 4.7L9.5 17a1.7 1.7 0 01-2.4-2.4L15 6.7"/></svg>',
+    send: '<svg class="i" viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8z"/></svg>',
+    trash: '<svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
+    archive: '<svg class="i" viewBox="0 0 24 24"><path d="M3 4h18v4H3zM5 8v12h14V8M10 12h4"/></svg>',
+    file: '<svg class="i" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6zM14 3v5h5"/></svg>',
+    restore: '<svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 109-9 9 9 0 00-7 3.3M3 4v5h5"/></svg>',
+    left: '<svg class="i" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
+    right: '<svg class="i" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>',
   };
 
   // ---------- durum ----------
@@ -47,6 +57,8 @@
     mv: { kind: '', from: '', to: '', q: '', cancelled: false, offset: 0, limit: 50, rows: [], total: 0 },
     activity: [], inboxSeen: 0, unread: 0, inboxOpen: false,
     railOpen: false,
+    chat: { channels: [], cid: null, msgs: [], hasMore: false, loaded: false, typing: {}, pending: [], filter: '', unread: 0, drafts: {}, mention: null },
+    lb: null,
   };
   const canWrite = () => S.me.role === 'admin' || S.me.role === 'member';
   const isAdmin = () => S.me.role === 'admin';
@@ -72,12 +84,13 @@
   // ---------- yükleme ----------
   async function boot() {
     const me = await api('GET', '/api/me');
-    S.me = me.me; S.team = me.team; S.settings = me.settings; S.pushOn = me.push; S.mailOn = me.mail; S.warning = me.warning || ''; S.inboxSeen = me.inboxSeen || 0; S.unread = me.unread || 0;
+    S.me = me.me; S.team = me.team; S.settings = me.settings; S.pushOn = me.push; S.mailOn = me.mail; S.warning = me.warning || ''; S.inboxSeen = me.inboxSeen || 0; S.unread = me.unread || 0; S.chat.unread = me.chatUnread || 0;
     if (S.warning) { $('banner').textContent = S.warning; $('banner').hidden = false; }
     await loadMaterials();
     const al = await api('GET', '/api/alerts'); S.alerts = al;
-    renderMe(); renderChips(); renderRail(); renderAlarmBar(); renderInboxCount();
+    renderMe(); renderChips(); renderRail(); renderAlarmBar(); renderInboxCount(); renderChatCount();
     route(); connect();
+    loadChannels().catch(() => {});
     try { const a = await api('GET', '/api/activity?limit=150'); S.activity = a.items; renderInboxCount(); } catch (e) {}
   }
   async function loadMaterials() {
@@ -97,12 +110,16 @@
     else if (p === 'hareketler') { S.view = 'movements'; const u = new URLSearchParams(h.split('?')[1] || ''); if (u.get('kind')) S.mv.kind = u.get('kind'); loadMovements(); }
     else if (p === 'alarmlar') { S.view = 'alerts'; refreshAlerts(); }
     else if (p === 'belge' && id) { openMovement(id); return; }
+    else if (p === 'sohbet') { S.view = 'chat'; if (id) S.chat.cid = id; openChat(); }
     else { S.view = 'dashboard'; loadDashboard(); }
+    $('pane').classList.toggle('chat-pane', S.view === 'chat');
+    if (S.view !== 'chat') stopTypingTicker();
     renderRail(); renderPaneHead(); renderPaneBody();
   }
   window.addEventListener('hashchange', route);
   async function loadDashboard() { try { S.dash = await api('GET', '/api/dashboard'); if (S.view === 'dashboard') renderPaneBody(); } catch (e) { toast(e.message); } }
-  async function loadMaterial(id) { S.matDetail = null; try { const r = await api('GET', '/api/materials/' + id); S.matDetail = r; setMaterial({ ...r.material, open_alert: r.material.open_alert }); if (S.view === 'material' && S.matId === id) { renderRail(); renderPaneHead(); renderPaneBody(); } } catch (e) { toast(e.message); go('#/malzemeler'); } }
+  async function loadMaterial(id) { S.matDetail = null; try { const r = await api('GET', '/api/materials/' + id); S.matDetail = r; if (!r.material.deleted_at) setMaterial({ ...r.material, open_alert: r.material.open_alert }); if (S.view === 'material' && S.matId === id) { renderRail(); renderPaneHead(); renderPaneBody(); } } catch (e) { toast(e.message); go('#/malzemeler'); } }
+  const curMaterial = () => S.matById.get(S.matId) || (S.matDetail && S.matDetail.material && S.matDetail.material.id === S.matId ? S.matDetail.material : null);
   async function loadMovements() {
     const q = new URLSearchParams(); if (S.mv.kind) q.set('kind', S.mv.kind); if (S.mv.from) q.set('from', S.mv.from); if (S.mv.to) q.set('to', S.mv.to); if (S.mv.q) q.set('q', S.mv.q); if (S.mv.cancelled) q.set('cancelled', '1'); q.set('limit', S.mv.limit); q.set('offset', S.mv.offset);
     try { const r = await api('GET', '/api/movements?' + q); S.mv.rows = r.movements; S.mv.total = r.total; if (S.view === 'movements') renderPaneBody(); } catch (e) { toast(e.message); }
@@ -138,6 +155,25 @@
       renderInboxCount(); if (S.inboxOpen) renderInbox();
     } else if (m.t === 'team') { api('GET', '/api/me').then(r => { S.team = r.team; S.me = r.me; renderMe(); }).catch(() => {}); }
     else if (m.t === 'settings') { S.settings = { ...S.settings, ...m.settings }; }
+    else if (m.t === 'chat') onChatMessage(m.message);
+    else if (m.t === 'chat-edit') { const i = S.chat.msgs.findIndex(x => x.id === m.message.id); if (i >= 0) { S.chat.msgs[i] = m.message; renderMessages(); } }
+    else if (m.t === 'chat-del') { const n = S.chat.msgs.length; S.chat.msgs = S.chat.msgs.filter(x => x.id !== m.id); if (S.chat.msgs.length !== n) renderMessages(); }
+    else if (m.t === 'channel') { const i = S.chat.channels.findIndex(c => c.id === m.channel.id); const prev = i >= 0 ? S.chat.channels[i] : { unread: 0 }; const ch = { ...m.channel, unread: prev.unread || 0, last_text: prev.last_text, last_by: prev.last_by }; if (i >= 0) S.chat.channels[i] = ch; else S.chat.channels.push(ch); if (S.view === 'chat') { renderChannels(); renderChanHead(); renderComposer(); } }
+    else if (m.t === 'typing') { if (!m.by || m.by.id === S.me.id) return; const t = S.chat.typing[m.cid] || (S.chat.typing[m.cid] = {}); t[m.by.id] = { name: m.by.name, until: Date.now() + 4000 }; renderTyping(); }
+  }
+  function onChatMessage(msg) {
+    const ch = S.chat.channels.find(c => c.id === msg.channel_id);
+    if (ch) { ch.last_text = msg.text; ch.last_by = msg.user_name; ch.last_msg_at = msg.ts; }
+    const viewing = S.view === 'chat' && S.chat.cid === msg.channel_id;
+    if (viewing) {
+      if (!S.chat.msgs.some(x => x.id === msg.id)) S.chat.msgs.push(msg);
+      if (S.chat.typing[msg.channel_id]) delete S.chat.typing[msg.channel_id][msg.user_id];
+      renderMessages(); renderTyping(); renderChannels();
+      if (msg.user_id !== S.me.id) { if (document.hasFocus()) markChannelRead(msg.channel_id, msg.ts); else { S.chat.unread++; if (ch) ch.unread = (ch.unread || 0) + 1; renderChatCount(); } }
+    } else if (msg.user_id !== S.me.id) {
+      S.chat.unread++; if (ch) ch.unread = (ch.unread || 0) + 1; renderChatCount(); if (S.view === 'chat') renderChannels();
+      if (mentionsMe(msg.text)) ntoast(`#${ch ? ch.name : 'sohbet'} · ${msg.user_name}`, msg.text, '#/sohbet/' + msg.channel_id);
+    }
   }
   function renderLive() { const l = $('live'); l.classList.toggle('live-on', S.live); l.classList.toggle('live-off', !S.live); $('liveText').textContent = S.live ? 'Canlı' : 'Bağlantı yok'; }
   function renderPresence() { const p = $('presence'); const list = S.peers.slice(0, 5); p.innerHTML = list.map(u => avatarHtml(u)).join('') + (S.peers.length ? `<span class="count">${S.peers.length} kişi bağlı</span>` : ''); }
@@ -159,6 +195,7 @@
     bar.innerHTML = `${ICON.alert}<span class="ab-text"><strong>${n} malzeme minimum stok limitinin altında:</strong> ${esc(names)}${n > 3 ? ' ve ' + (n - 3) + ' malzeme daha' : ''}</span><button class="btn sm">Alarmları aç</button>`;
     bar.hidden = false;
   }
+  function renderChatCount() { const c = $('chatCount'); const n = S.chat.unread; c.textContent = n > 99 ? '99+' : n; c.hidden = !n; const b = $('railList').querySelector('.nbadge.chat'); if ((b && !n) || (!b && n)) renderRail(); else if (b) b.textContent = n; }
   function renderInboxCount() { const c = $('inboxCount'); const n = S.activity.filter(a => a.ts > S.inboxSeen && a.user_id !== S.me.id).length || S.unread; c.textContent = n > 99 ? '99+' : n; c.hidden = !n; }
 
   // ---------- sol şerit ----------
@@ -178,9 +215,9 @@
     });
   }
   function renderRail() {
-    const nav = [['dashboard', '#/', 'Genel bakış', '<svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>'], ['materials', '#/malzemeler', 'Malzemeler ve stok', ICON.box], ['movements', '#/hareketler', 'Hareketler', '<svg class="i" viewBox="0 0 24 24"><path d="M4 9h12l-3-3M20 15H8l3 3"/></svg>'], ['alerts', '#/alarmlar', 'Alarmlar', ICON.alert]];
+    const nav = [['dashboard', '#/', 'Genel bakış', '<svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>'], ['materials', '#/malzemeler', 'Malzemeler ve stok', ICON.box], ['movements', '#/hareketler', 'Hareketler', '<svg class="i" viewBox="0 0 24 24"><path d="M4 9h12l-3-3M20 15H8l3 3"/></svg>'], ['alerts', '#/alarmlar', 'Alarmlar', ICON.alert], ['chat', '#/sohbet', 'Sohbet', ICON.chat]];
     const list = filteredMaterials();
-    let h = `<div class="home-row nav-row">${nav.map(([v, href, l, ic]) => `<button class="prow ${S.view === v ? 'on' : ''}" data-action="go" data-href="${href}"><span class="pname">${ic}${l}${v === 'alerts' && S.alerts.open.length ? `<span class="nbadge">${S.alerts.open.length}</span>` : ''}</span></button>`).join('')}</div>`;
+    let h = `<div class="home-row nav-row">${nav.map(([v, href, l, ic]) => `<button class="prow ${S.view === v ? 'on' : ''}" data-action="go" data-href="${href}"><span class="pname">${ic}${l}${v === 'alerts' && S.alerts.open.length ? `<span class="nbadge">${S.alerts.open.length}</span>` : ''}${v === 'chat' && S.chat.unread ? `<span class="nbadge chat">${S.chat.unread}</span>` : ''}</span></button>`).join('')}</div>`;
     h += `<div class="rail-section"><span>Malzemeler</span><span class="mono">${list.length}</span></div>`;
     if (!list.length) h += `<p class="muted small" style="padding:6px 10px">${S.materials.length ? 'Bu filtreye uyan malzeme yok.' : 'Henüz malzeme kartı yok.'}</p>`;
     else h += `<div class="plist">${list.map(m => { const s = stateOf(m); return `<button class="prow ${S.view === 'material' && S.matId === m.id ? 'on' : ''} ${!m.active ? 'off' : ''}" data-action="go" data-href="#/malzeme/${m.id}"><span class="pbar g-${s}" style="background:var(--g)"></span><span class="pname"><span class="ptext">${esc(m.name)}</span></span><span class="pmeta">${esc(m.code)}${m.category ? ' · ' + esc(m.category) : ''}</span><span class="pstock ${s}">${fmtNum(m.stock)} ${esc(m.unit)}</span></button>`; }).join('')}</div>`;
@@ -199,11 +236,13 @@
     else if (S.view === 'materials') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Malzemeler ve stok</h1><div class="ph-sub"><span>${S.materials.filter(m => m.active).length} aktif malzeme</span><span>Minimum limiti her malzemenin kartından ayarlayın</span></div></div>${btns(canWrite() ? `<button class="btn sm" data-action="new-material">${ICON.plus} Malzeme kartı</button>` : '')}</div><div style="height:16px"></div>`;
     else if (S.view === 'movements') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Hareketler</h1><div class="ph-sub"><span>Giriş, sevkiyat ve düzeltme belgeleri</span><span>Her belge için PDF fişi hazırdır</span></div></div>${btns(canWrite() ? `<button class="btn sm" data-action="new-movement" data-kind="adj">${ICON.adj} Düzeltme</button>` : '')}</div><div style="height:16px"></div>`;
     else if (S.view === 'alerts') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Alarmlar</h1><div class="ph-sub"><span>${S.alerts.open.length ? S.alerts.open.length + ' aktif alarm' : 'Aktif alarm yok'}</span><span>Stok, kartında belirlenen minimum limitin altına düşünce alarm açılır; limitin üstüne çıkınca kendiliğinden kapanır</span></div></div>${btns()}</div><div style="height:16px"></div>`;
+    else if (S.view === 'chat') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Sohbet</h1><div class="ph-sub"><span>Depo ekibinin ortak kanalları</span><span>Mesajlar saklanır; @ad ile birine seslenebilirsiniz</span></div></div><div class="ph-actions">${canWrite() ? `<button class="btn sm" data-action="new-channel">${ICON.plus} Yeni kanal</button>` : ''}</div></div>`;
     else if (S.view === 'material') {
-      const m = S.matById.get(S.matId);
+      const m = curMaterial();
       if (!m) { H.innerHTML = '<div class="ph-row"><div class="ph-title"><h1>Yükleniyor…</h1></div></div><div style="height:16px"></div>'; return; }
-      H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>${esc(m.name)} ${statePill(m)}</h1><div class="ph-sub"><span class="mono">${esc(m.code)}</span>${m.category ? `<span>${esc(m.category)}</span>` : ''}${m.location ? `<span>${esc(m.location)}</span>` : ''}<span>birim: ${esc(m.unit)}</span></div></div>
-        <div class="ph-actions">${canWrite() && m.active ? `<button class="btn primary sm" data-action="new-movement" data-kind="in" data-material="${m.id}">${ICON.in} Giriş</button><button class="btn sm" data-action="new-movement" data-kind="out" data-material="${m.id}">${ICON.out} Sevkiyat</button><button class="btn sm" data-action="new-movement" data-kind="adj" data-material="${m.id}">${ICON.adj} Düzeltme</button>` : ''}${canWrite() ? `<button class="btn sm" data-action="set-limit" data-id="${m.id}">${ICON.alert} Limit</button><button class="btn sm" data-action="edit-material" data-id="${m.id}">${ICON.edit} Düzenle</button>` : ''}</div></div><div style="height:16px"></div>`;
+      const del = !!m.deleted_at;
+      H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>${esc(m.name)} ${del ? '<span class="pill cancel">Silindi</span>' : statePill(m)}</h1><div class="ph-sub"><span class="mono">${esc(m.code)}</span>${m.category ? `<span>${esc(m.category)}</span>` : ''}${m.location ? `<span>${esc(m.location)}</span>` : ''}<span>birim: ${esc(m.unit)}</span></div></div>
+        <div class="ph-actions">${canWrite() && m.active && !del ? `<button class="btn primary sm" data-action="new-movement" data-kind="in" data-material="${m.id}">${ICON.in} Giriş</button><button class="btn sm" data-action="new-movement" data-kind="out" data-material="${m.id}">${ICON.out} Sevkiyat</button><button class="btn sm" data-action="new-movement" data-kind="adj" data-material="${m.id}">${ICON.adj} Düzeltme</button>` : ''}${canWrite() && !del ? `<button class="btn sm" data-action="set-limit" data-id="${m.id}">${ICON.alert} Limit</button><button class="btn sm" data-action="edit-material" data-id="${m.id}">${ICON.edit} Düzenle</button>` : ''}${isAdmin() && !del ? `<button class="btn sm danger" data-action="delete-material" data-id="${m.id}" title="Kartı sil">${ICON.trash}</button>` : ''}${isAdmin() && del ? `<button class="btn primary sm" data-action="restore-material" data-id="${m.id}">${ICON.restore} Geri al</button>` : ''}</div></div><div style="height:16px"></div>`;
     }
   }
 
@@ -215,6 +254,7 @@
     else if (S.view === 'movements') B.innerHTML = `<div class="scroll">${movementsHtml()}</div>`;
     else if (S.view === 'alerts') B.innerHTML = `<div class="scroll">${alertsHtml()}</div>`;
     else if (S.view === 'material') B.innerHTML = `<div class="scroll">${materialHtml()}</div>`;
+    else if (S.view === 'chat') { B.innerHTML = `<div class="chat"><aside class="channels" id="channels"></aside><section class="chat-main" id="chatMain"><div class="chan-head" id="chanHead"></div><div class="msgs" id="msgs"></div><div class="typing" id="typing"></div><div class="composer-wrap" id="composerWrap"></div></section></div>`; renderChannels(); renderChanHead(); renderMessages(); renderComposer(); renderTyping(); }
   }
   const mvRow = (r) => { const k = r.cancelled ? 'cancel' : r.kind; return `<button class="mvrow ${r.cancelled ? 'cancelled' : ''}" data-action="open-doc" data-id="${r.id}"><span class="kico ${k}">${ICON[k]}</span><span class="mt">${esc(r.doc_no)} · ${esc(r.summary || '')}${r.line_count > 3 ? ' …' : ''}</span><span class="ms">${esc(r.ordered_by)}${r.counterparty ? ' · ' + esc(r.counterparty) : ''} · ${esc(r.created_by_name || '')}</span><span class="mq ${r.kind}">${r.line_count} kalem</span><span class="md">${fmtDate(r.doc_date)} ${fmtTime(r.created_at)}</span></button>`; };
   function dashboardHtml() {
@@ -249,7 +289,7 @@
     const toolbar = `<div class="toolbar"><span class="count">${list.length} malzeme${S.chip !== 'all' ? ' (filtreli)' : ''}</span>${cats.length ? `<select id="catFilter" data-action="cat-filter" style="width:auto"><option value="">Tüm kategoriler</option>${cats.map(c => `<option ${S.q === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}<span class="spacer"></span><a class="btn sm" href="/api/export/stock.csv" download>${ICON.download} Stok listesi (Excel/CSV)</a></div>`;
     if (!list.length) return toolbar + (S.materials.length ? emptyHtml('Bu filtreye uyan malzeme yok', 'Sol şeritteki filtreyi veya aramayı değiştirin.') : emptyHtml('Henüz malzeme kartı yok', 'Her malzeme için bir kart açın: kod, ad, birim, konum ve minimum stok limiti. Giriş ve sevkiyat fişleri bu kartlara işlenir.'));
     return toolbar + `<div class="table-card"><div class="tablewrap"><table class="stock"><thead><tr>${th('code', 'Kod')}${th('name', 'Malzeme')}${th('category', 'Kategori / Konum')}${th('stock', 'Stok', 'r')}<th>Seviye</th>${th('min_stock', 'Min. limit', 'r')}${th('state', 'Durum')}<th></th></tr></thead><tbody>
-      ${list.map(m => { const s = stateOf(m); return `<tr class="rowlink ${s}" data-action="go" data-href="#/malzeme/${m.id}"><td class="mono">${esc(m.code)}</td><td><div class="t">${esc(m.name)}</div>${m.description ? `<div class="s">${esc(m.description.slice(0, 80))}</div>` : ''}</td><td><div>${esc(m.category || '—')}</div><div class="s">${esc(m.location || '')}</div></td><td class="num ${s}">${fmtNum(m.stock)} <span class="muted" style="font-weight:400">${esc(m.unit)}</span></td><td>${meter(m)}</td><td class="r">${m.min_stock > 0 ? fmtNum(m.min_stock) + ' ' + esc(m.unit) : '<span class="muted">—</span>'}</td><td>${statePill(m)}</td><td class="acts">${canWrite() ? `<button class="icon-btn" title="Giriş fişi" data-action="new-movement" data-kind="in" data-material="${m.id}">${ICON.in}</button><button class="icon-btn" title="Sevkiyat fişi" data-action="new-movement" data-kind="out" data-material="${m.id}">${ICON.out}</button><button class="icon-btn" title="Düzenle" data-action="edit-material" data-id="${m.id}">${ICON.edit}</button>` : ''}</td></tr>`; }).join('')}</tbody></table></div></div>`;
+      ${list.map(m => { const s = stateOf(m); return `<tr class="rowlink ${s}" data-action="go" data-href="#/malzeme/${m.id}"><td class="mono">${esc(m.code)}</td><td><div class="t">${esc(m.name)}</div>${m.description ? `<div class="s">${esc(m.description.slice(0, 80))}</div>` : ''}</td><td><div>${esc(m.category || '—')}</div><div class="s">${esc(m.location || '')}</div></td><td class="num ${s}">${fmtNum(m.stock)} <span class="muted" style="font-weight:400">${esc(m.unit)}</span></td><td>${meter(m)}</td><td class="r">${m.min_stock > 0 ? fmtNum(m.min_stock) + ' ' + esc(m.unit) : '<span class="muted">—</span>'}</td><td>${statePill(m)}</td><td class="acts">${canWrite() ? `<button class="icon-btn" title="Giriş fişi" data-action="new-movement" data-kind="in" data-material="${m.id}">${ICON.in}</button><button class="icon-btn" title="Sevkiyat fişi" data-action="new-movement" data-kind="out" data-material="${m.id}">${ICON.out}</button><button class="icon-btn" title="Düzenle" data-action="edit-material" data-id="${m.id}">${ICON.edit}</button>${isAdmin() ? `<button class="icon-btn" title="Kartı sil" data-action="delete-material" data-id="${m.id}">${ICON.trash}</button>` : ''}` : ''}</td></tr>`; }).join('')}</tbody></table></div></div>`;
   }
 
   function movementsHtml() {
@@ -270,16 +310,17 @@
   }
 
   function materialHtml() {
-    const m = S.matById.get(S.matId); const D = S.matDetail;
+    const m = curMaterial(); const D = S.matDetail;
     if (!m || !D || D.material.id !== m.id) return '<div class="skeleton"></div><div class="skeleton"></div>';
     const s = stateOf(m);
+    const delNote = m.deleted_at ? `<div class="err" style="margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${ICON.trash}<span><b>Bu kart silinmiş.</b> ${fmtDT(m.deleted_at)} · Listelerde, aramalarda ve alarmlarda görünmez; geçmiş belgeleri ve PDF fişleri değişmeden saklanır.</span>${isAdmin() ? `<button class="btn sm" data-action="restore-material" data-id="${m.id}">${ICON.restore} Geri al</button>` : ''}</div>` : '';
     const hero = `<div class="card ${s === 'low' ? 't-rose' : s === 'near' ? 't-sand' : 't-sky'}"><h3>Mevcut stok ${statePill(m)}</h3><div class="stock-hero"><div class="big ${s}">${fmtNum(m.stock)}<small>${esc(m.unit)}</small></div><div class="lim">${m.min_stock > 0 ? `${meter(m)}<div class="l"><span>Minimum limit: <b>${fmtNum(m.min_stock)} ${esc(m.unit)}</b></span><span>${m.stock >= m.min_stock ? 'Limitin ' + fmtNum(m.stock - m.min_stock) + ' ' + esc(m.unit) + ' üstünde' : '<b style="color:var(--bad)">Limitin ' + fmtNum(m.min_stock - m.stock) + ' ' + esc(m.unit) + ' altında</b>'}</span></div>` : `<div class="l"><span>Minimum stok limiti tanımlı değil; bu malzeme için alarm üretilmez.</span>${canWrite() ? `<button class="btn sm" data-action="set-limit" data-id="${m.id}">Limit belirle</button>` : ''}</div>`}${m.last_move ? `<div class="l"><span>Son hareket: ${fmtDT(m.last_move)}</span></div>` : ''}</div></div></div>`;
-    const details = `<div class="card"><h3>Kart bilgileri</h3><dl class="details"><dt>Kod</dt><dd class="mono">${esc(m.code)}</dd><dt>Birim</dt><dd>${esc(m.unit)}</dd><dt>Kategori</dt><dd>${esc(m.category || '—')}</dd><dt>Konum</dt><dd>${esc(m.location || '—')}</dd><dt>Açıklama</dt><dd>${esc(m.description || '—')}</dd><dt>Durum</dt><dd>${m.active ? 'Aktif' : 'Pasif — hareket girilemez'}</dd><dt>Oluşturma</dt><dd>${fmtDT(m.created_at)}${m.created_by && userById(m.created_by) ? ' · ' + esc(userById(m.created_by).name) : ''}</dd></dl>${isAdmin() && !D.history.length ? `<div style="margin-top:12px"><button class="btn danger sm" data-action="delete-material" data-id="${m.id}">Kartı sil</button></div>` : ''}</div>`;
+    const details = `<div class="card"><h3>Kart bilgileri</h3><dl class="details"><dt>Kod</dt><dd class="mono">${esc(m.code)}</dd><dt>Birim</dt><dd>${esc(m.unit)}</dd><dt>Kategori</dt><dd>${esc(m.category || '—')}</dd><dt>Konum</dt><dd>${esc(m.location || '—')}</dd><dt>Açıklama</dt><dd>${esc(m.description || '—')}</dd><dt>Durum</dt><dd>${m.active ? 'Aktif' : 'Pasif — hareket girilemez'}</dd><dt>Oluşturma</dt><dd>${fmtDT(m.created_at)}${m.created_by && userById(m.created_by) ? ' · ' + esc(userById(m.created_by).name) : ''}</dd></dl>${isAdmin() && !m.deleted_at ? `<div style="margin-top:12px"><button class="btn danger sm" data-action="delete-material" data-id="${m.id}">${ICON.trash} Kartı sil</button></div>` : ''}</div>`;
     const chart = `<div class="card"><h3>${ICON.chart} Stok seyri</h3>${sparkHtml(D.history.filter(h => !h.cancelled), m)}</div>`;
     const hist = D.history.slice().reverse();
     const table = `<div class="card flush"><h3>Hareket geçmişi <span class="mono">${hist.length}</span></h3>${hist.length ? `<div class="tablewrap"><table class="stock"><thead><tr><th>Tarih</th><th>Belge</th><th>Tür</th><th class="r">Miktar</th><th class="r">Kalan</th><th>Talimatı veren</th><th>Karşı taraf</th><th>Kaydeden</th><th></th></tr></thead><tbody>${hist.map(h => `<tr class="rowlink ${h.cancelled ? 'cancelled' : ''}" data-action="open-doc" data-id="${h.movement_id}"><td class="date">${fmtDate(h.doc_date)}<div class="s muted">${fmtTime(h.created_at)}</div></td><td class="mono"><span class="t">${esc(h.doc_no)}</span></td><td><span class="pill ${h.cancelled ? 'cancel' : h.kind}">${h.cancelled ? 'İptal' : KIND[h.kind]}</span></td><td class="num" style="color:var(--${h.kind === 'in' ? 'ok' : h.kind === 'out' ? 'info' : 'violet'})">${h.kind === 'in' ? '+' : h.kind === 'out' ? '−' : (h.qty > 0 ? '+' : '')}${fmtNum(Math.abs(h.qty))}</td><td class="num">${fmtNum(h.stock_after)}</td><td>${esc(h.ordered_by)}</td><td>${esc(h.counterparty || '—')}</td><td>${esc(h.created_by_name || '')}</td><td class="acts"><a class="icon-btn" title="PDF fişi" href="/api/movements/${h.movement_id}/pdf" target="_blank" rel="noopener" data-stop="1">${ICON.pdf}</a></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted" style="padding:10px 20px 18px;margin:0">Bu malzeme için henüz hareket yok.</p>'}</div>`;
     const al = D.alerts.length ? `<div class="card"><h3>${ICON.alert} Alarm geçmişi</h3><div class="list">${D.alerts.map(a => `<div class="row"><span class="grow"><span class="t">${a.resolved_at ? 'Kapandı' : 'Aktif'} · açılış stoğu ${fmtNum(a.stock_at_open)} / limit ${fmtNum(a.min_at_open)} ${esc(m.unit)}</span><span class="s">${fmtDT(a.opened_at)}${a.resolved_at ? ' → ' + fmtDT(a.resolved_at) : ''}</span></span><span class="pill ${a.resolved_at ? 'ok' : 'low'}">${a.resolved_at ? 'Kapandı' : 'Aktif'}</span></div>`).join('')}</div></div>` : '';
-    return `<div class="grid2"><div>${hero}${chart}</div><div>${details}${al}</div></div><div style="height:20px"></div>${table}`;
+    return delNote + `<div class="grid2"><div>${hero}${chart}</div><div>${details}${al}</div></div><div style="height:20px"></div>${table}`;
   }
   // Stok seyri: her hareketten sonraki kalan stok, zaman ekseninde. Limit kesikli kırmızı çizgi.
   function sparkHtml(hist, m) {
@@ -303,7 +344,7 @@
   function renderInbox() {
     const box = $('inbox'); if (!S.inboxOpen) { box.hidden = true; return; }
     const items = S.activity; let last = '';
-    const icon = (a) => a.kind === 'alert' ? ICON.alert : a.kind === 'movement' ? ICON.chart : a.kind === 'material' ? ICON.box : ICON.team;
+    const icon = (a) => a.kind === 'alert' ? ICON.alert : a.kind === 'movement' ? ICON.chart : a.kind === 'material' ? ICON.box : a.kind === 'chat' ? ICON.chat : ICON.team;
     const body = items.length ? items.map(a => { const day = dayOf(a.ts); let h = ''; if (day !== last) { last = day; h += `<div class="ib-day">${day === todayIso() ? 'Bugün' : fmtDate(day)}</div>`; } const unread = a.ts > S.inboxSeen && a.user_id !== S.me.id; const u = a.user_id ? userById(a.user_id) || { name: a.user_name, color: a.user_color } : null; return h + `<button class="ib-item ${unread ? 'is-unread' : ''}" data-action="inbox-go" data-ref='${esc(JSON.stringify(a.ref || {}))}'>${u ? avatarHtml(u) : `<span class="av" style="background:var(--bad)">${a.kind === 'alert' ? '!' : '•'}</span>`}<span class="ib-body"><span class="ib-text"><b>${esc(a.title)}</b></span>${a.text ? `<span class="ib-prev">${esc(a.text)}</span>` : ''}<span class="ib-meta">${icon(a)} ${fmtTime(a.ts)}${u ? ' · ' + esc(u.name) : ''}</span></span><span class="ib-dot"></span></button>`; }).join('') : `<div class="ib-empty">${ICON.bell}<p>Henüz kayıt yok. Hareketler, alarmlar ve ekip değişiklikleri burada listelenir.</p></div>`;
     box.innerHTML = `<div class="ib-head"><h2>${ICON.bell} Bildirimler</h2><div class="ib-tools"><button class="btn ghost sm" data-action="inbox-read-all">Tümünü okundu say</button><button class="icon-btn" data-action="close-inbox" aria-label="Kapat">${ICON.x}</button></div></div><div class="ib-list">${body}</div>`;
     box.hidden = false;
@@ -444,7 +485,7 @@
   // --- ayarlar ---
   async function settingsModal() {
     let pushState = 'unsupported'; try { pushState = window.deskPush ? await window.deskPush.status() : 'unsupported'; } catch (e) {}
-    let adm = null; if (isAdmin()) { try { adm = (await api('GET', '/api/admin/settings')).settings; } catch (e) {} }
+    let adm = null, deleted = []; if (isAdmin()) { try { adm = (await api('GET', '/api/admin/settings')).settings; deleted = (await api('GET', '/api/materials/deleted')).materials; } catch (e) {} }
     const theme = localStorage.getItem('depo:theme') || 'system';
     const pushTxt = { on: ['ok', 'Açık', 'Bu cihaz stok alarmlarında ve yeni belgelerde bildirim alır.'], off: ['warn', 'Kapalı', 'Bu cihazda bildirim kapalı. Açtığınızda alarmlar uygulama kapalıyken bile ulaşır.'], blocked: ['bad', 'Engelli', 'Tarayıcı bu site için bildirimleri engellemiş; site ayarlarından izin verin.'], install: ['warn', 'Kurulum gerekli', 'iPhone/iPad\'de bildirim için uygulamayı önce Ana Ekrana ekleyin (Paylaş → Ana Ekrana Ekle).'], unsupported: ['warn', 'Desteklenmiyor', S.pushOn ? 'Bu tarayıcı anlık bildirimi desteklemiyor.' : 'Sunucuda anlık bildirim yapılandırılmamış (VAPID anahtarları). Alarmlar uygulama içinde ve e-posta ile iletilir.'] }[pushState];
     modal(modalHead('Ayarlar ve bildirimler', '') + `<div class="settings">
@@ -457,6 +498,7 @@
         <label class="set-check"><input type="checkbox" name="allowNegative" ${adm.allowNegative ? 'checked' : ''}><span>Eksi stoğa izin ver<small>Açıksa sevkiyat, mevcut stoktan fazla olsa bile kaydedilir (kayıtlar fiziksel hareketin gerisinde kalıyorsa). Kapalıysa yetersiz stokta belge reddedilir.</small></span></label>
         <div class="eyebrow" style="margin:14px 0 8px">PDF fişi başlığı</div><div class="form-grid"><label class="f span2">Şirket adı<input type="text" name="cname" value="${esc(adm.company.name)}"></label><label class="f span2">Adres<input type="text" name="caddress" value="${esc(adm.company.address)}"></label><label class="f span2">İkinci satır<input type="text" name="cline2" value="${esc(adm.company.line2)}"></label></div>
         <div class="set-actions"><button class="btn primary sm" type="submit">Yönetici ayarlarını kaydet</button><button type="button" class="btn sm" data-action="team">${ICON.team} Ekip ve davetler</button><a class="btn sm" href="/api/admin/backup" download>${ICON.download} Veritabanı yedeği</a></div></form></div>` : ''}
+      ${isAdmin() ? `<div class="set-section"><h3>${ICON.trash} Silinen malzeme kartları <span class="muted" style="font-weight:400">(${deleted.length})</span></h3>${deleted.length ? `<div>${deleted.map(m => `<div class="del-card"><span class="grow"><div><b>${esc(m.name)}</b> <span class="mono small muted">${esc(m.code)}</span></div><div class="small muted">${fmtDT(m.deleted_at)}${m.deleted_by_name ? ' · ' + esc(m.deleted_by_name) : ''} · ${m.line_count} hareket satırı · son stok ${fmtNum(m.stock)} ${esc(m.unit)}</div></span><button class="btn sm" data-action="restore-material" data-id="${m.id}" data-from="settings">${ICON.restore} Geri al</button></div>`).join('')}</div>` : '<p class="muted small" style="margin:0">Hareketi olan bir kart silindiğinde burada listelenir ve geri alınabilir. Hareketi olmayan kartlar kalıcı olarak silinir.</p>'}</div>` : ''}
       <div class="set-section"><h3>Görünüm</h3><div class="seg">${[['system', 'Sistem'], ['light', 'Açık'], ['dark', 'Koyu']].map(([k, l]) => `<button type="button" class="${theme === k ? 'on' : ''}" data-action="theme" data-theme="${k}">${l}</button>`).join('')}</div></div>
       <div class="set-section"><h3>Uygulama</h3><p class="muted small" style="margin:0">Malzeme Takip · Peak PV Solar · Telefonda tek dokunuşla açmak için tarayıcı menüsünden "Ana Ekrana Ekle".</p></div>
     </div>`);
@@ -482,6 +524,238 @@
     $('invForm').addEventListener('submit', async (e) => { e.preventDefault(); const f = e.target; try { const x = await api('POST', '/api/admin/invite', { name: f.name.value, email: f.email.value, role: f.role.value }); teamModal(linkNote(x.user.name, x.inviteUrl, x.emailed)); } catch (err) { $('err').textContent = err.message; $('err').hidden = false; } });
   }
   const linkNote = (name, url, emailed) => `<div class="ok-note" style="margin:0 0 14px">${emailed ? `${esc(name)} için davet e-postası gönderildi.` : `${esc(name)} için bağlantı hazır — kopyalayıp iletin (7 gün geçerli):`}<div class="copybox"><input type="text" readonly value="${esc(url)}" onclick="this.select()"><button type="button" class="btn sm" data-action="copy" data-text="${esc(url)}">Kopyala</button></div></div>`;
+
+
+  // ---------- malzeme kartı silme (yönetici) ----------
+  async function deleteMaterialForm(id) {
+    const m = S.matById.get(id) || curMaterial(); if (!m) return;
+    let lines = 0; try { const r = await api('GET', '/api/materials/' + id); lines = r.history.length; } catch (e) {}
+    const soft = lines > 0;
+    modal(modalHead('Malzeme kartını sil', esc(m.name)) + `<form id="delForm"><div id="err" class="err" hidden></div>
+      <p style="margin:0 0 10px"><b>${esc(m.name)}</b> <span class="mono muted small">${esc(m.code)}</span> · mevcut stok <b>${fmtNum(m.stock)} ${esc(m.unit)}</b></p>
+      ${soft ? `<div class="preview-warn">${ICON.alert}<span>Bu kartın <b>${lines} hareket satırı</b> var. Kart listelerden, aramalardan, belge satır seçiminden ve alarmlardan kaldırılır; <b>geçmiş belgeler ve PDF fişleri değişmeden saklanır</b>. Gerekirse Ayarlar → <i>Silinen malzeme kartları</i> bölümünden geri alınabilir.</span></div>`
+             : `<div class="preview-warn bad">${ICON.alert}<span>Bu kartın hiç hareketi yok; <b>kalıcı olarak silinir</b> ve geri alınamaz.</span></div>`}
+      <label class="f" style="margin-top:14px">Onaylamak için kartın kodunu yazın<input type="text" name="confirm" autocomplete="off" placeholder="${esc(m.code)}" autofocus></label>
+      <div class="form-actions"><div class="right"><button type="button" class="btn" data-action="close-modal">Vazgeç</button><button class="btn danger" type="submit">Kartı sil</button></div></div></form>`, 'narrow');
+    $('delForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); const v = e.target.confirm.value.trim().toLocaleLowerCase('tr');
+      if (v !== m.code.toLocaleLowerCase('tr')) { $('err').textContent = 'Kod eşleşmedi. Silmek için kartın kodunu aynen yazın.'; $('err').hidden = false; return; }
+      try { const r = await api('DELETE', '/api/materials/' + id, {}); closeModal(); toast(r.mode === 'soft' ? 'Kart silindi; hareket geçmişi saklandı.' : 'Kart kalıcı olarak silindi.'); S.materials = S.materials.filter(x => x.id !== id); S.matById.delete(id); renderRail(); renderChips(); if (S.view === 'material' && S.matId === id) go('#/malzemeler'); else if (S.view === 'materials') renderPaneBody(); else if (S.view === 'dashboard') loadDashboard(); }
+      catch (err) { $('err').textContent = err.message; $('err').hidden = false; }
+    });
+  }
+
+  // ---------- sohbet ----------
+  const C = S.chat;
+  const curChannel = () => C.channels.find(c => c.id === C.cid) || null;
+  const fmtBytes = (n) => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+  const isImg = (mime) => /^image\/(jpeg|png|gif|webp)$/.test(mime || '');
+  const fileUrl = (a, dl) => '/files/' + a.id + '/' + encodeURIComponent(a.name || 'dosya') + (dl ? '?dl' : '');
+  function fmtDay(ts) { const d = dayOf(ts); const t = todayIso(); if (d === t) return 'Bugün'; const y = dayOf(Date.now() - 86400000); if (d === y) return 'Dün'; return new Intl.DateTimeFormat('tr-TR', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(ts)); }
+  const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function mentionNames() { return [...S.team].sort((a, b) => b.name.length - a.name.length); }
+  function inline(text) {
+    let h = esc(text);
+    h = h.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    h = h.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    for (const u of mentionNames()) { const full = esc(u.name); const first = full.split(/\s+/)[0]; h = h.replace(new RegExp('@(' + reEsc(full) + '|' + reEsc(first) + ')(?![\\p{L}\\p{N}_])', 'giu'), '<span class="mn">@$1</span>'); }
+    return h;
+  }
+  function mentionsMe(text) { if (!text || !text.includes('@')) return false; const t = text.toLocaleLowerCase('tr'); const full = S.me.name.toLocaleLowerCase('tr'); const first = full.split(/\s+/)[0]; return t.includes('@' + full) || new RegExp('@' + reEsc(first) + '(?![\\p{L}\\p{N}_])', 'u').test(t); }
+
+  async function loadChannels() { const r = await api('GET', '/api/chat/channels'); C.channels = r.channels; C.unread = r.unread; renderChatCount(); if (S.view === 'chat') { renderChannels(); renderChanHead(); renderComposer(); } }
+  async function openChat() {
+    if (!C.channels.length) { try { await loadChannels(); } catch (e) {} }
+    if (!C.cid || !curChannel()) { const first = C.channels.find(c => !c.archived) || C.channels[0]; if (first) { C.cid = first.id; if (location.hash !== '#/sohbet/' + first.id) history.replaceState(null, '', '#/sohbet/' + first.id); } }
+    C.msgs = []; C.loaded = false; C.hasMore = false; C.filter = '';
+    renderPaneBody();
+    if (C.cid) await loadMessages(false);
+    startTypingTicker();
+  }
+  async function loadMessages(older) {
+    const cid = C.cid; if (!cid) return;
+    const before = older && C.msgs.length ? C.msgs[0].ts : 0;
+    try {
+      const r = await api('GET', `/api/chat/channels/${cid}/messages?limit=60${before ? '&before=' + before : ''}`);
+      if (C.cid !== cid) return;
+      const el = $('msgs'); const prevH = el ? el.scrollHeight : 0;
+      C.msgs = older ? [...r.messages, ...C.msgs] : r.messages; C.hasMore = r.hasMore; C.loaded = true;
+      renderMessages(older);
+      if (older && el) el.scrollTop = el.scrollHeight - prevH;
+      if (!older && C.msgs.length && document.hasFocus()) markChannelRead(cid, C.msgs[C.msgs.length - 1].ts);
+    } catch (e) { toast(e.message); }
+  }
+  let readTimer = null;
+  function markChannelRead(cid, ts) {
+    const ch = C.channels.find(c => c.id === cid); if (ch && ch.unread) { C.unread = Math.max(0, C.unread - ch.unread); ch.unread = 0; renderChatCount(); renderChannels(); }
+    clearTimeout(readTimer); readTimer = setTimeout(() => { api('POST', `/api/chat/channels/${cid}/read`, { ts }).then(r => { C.unread = r.unread; renderChatCount(); }).catch(() => {}); }, 300);
+  }
+  function renderChannels() {
+    const el = $('channels'); if (!el) return;
+    const act = C.channels.filter(c => !c.archived), arch = C.channels.filter(c => c.archived);
+    const row = (c) => `<button class="chrow ${c.id === C.cid ? 'on' : ''} ${c.archived ? 'arch' : ''}" data-action="select-channel" data-id="${c.id}">${c.archived ? ICON.archive : ICON.hash}<span class="nm">${esc(c.name)}</span>${c.unread ? `<span class="cnt">${c.unread}</span>` : ''}</button>`;
+    el.innerHTML = `<div class="rail-section"><span>Kanallar</span>${canWrite() ? `<button class="icon-btn" data-action="new-channel" title="Yeni kanal" aria-label="Yeni kanal">${ICON.plus}</button>` : ''}</div>
+      <div class="chlist">${act.map(row).join('') || '<div class="muted small" style="padding:6px 8px">Henüz kanal yok.</div>'}${arch.length ? `<div class="rail-section" style="padding-top:14px"><span>Arşiv</span><span class="mono">${arch.length}</span></div>${arch.map(row).join('')}` : ''}</div>`;
+  }
+  function renderChanHead() {
+    const el = $('chanHead'); if (!el) return; const c = curChannel();
+    if (!c) { el.innerHTML = '<span class="muted small">Bir kanal seçin veya oluşturun.</span>'; return; }
+    el.innerHTML = `<span class="cn">${ICON.hash}${esc(c.name)}</span><span class="ct" title="${esc(c.topic || '')}">${esc(c.topic || '')}</span>
+      <span class="cs"><input type="search" id="msgSearch" placeholder="Kanalda ara" value="${esc(C.filter)}" aria-label="Kanalda ara">
+        <a class="btn sm ghost" href="/api/chat/channels/${c.id}/export" download title="Sohbeti Markdown olarak indir">${ICON.download}</a>
+        ${canWrite() ? `<button class="btn sm ghost" data-action="edit-channel" title="Adı veya konuyu değiştir">${ICON.edit}</button>` : ''}
+        ${isAdmin() ? `<button class="btn sm ghost" data-action="${c.archived ? 'unarchive-channel' : 'archive-channel'}" title="${c.archived ? 'Arşivden çıkar' : 'Kanalı arşivle'}">${ICON.archive}</button>` : ''}
+      </span>`;
+  }
+  function attachmentsHtml(m) {
+    const att = m.att || []; if (!att.length) return '';
+    const imgs = att.filter(a => isImg(a.mime)), files = att.filter(a => !isImg(a.mime)); let h = '';
+    if (imgs.length) h += `<div class="msg-photos n${Math.min(imgs.length, 4)}">${imgs.map(a => `<button type="button" class="photo" data-action="view-photo" data-id="${a.id}" title="${esc(a.name)}" ${a.w && a.h ? `style="aspect-ratio:${a.w}/${a.h}"` : ''}><img src="${fileUrl(a)}" alt="${esc(a.name)}" loading="lazy" ${a.w ? `width="${a.w}" height="${a.h}"` : ''}></button>`).join('')}</div>`;
+    if (files.length) h += `<div class="msg-files">${files.map(a => `<div class="file-chip"><a class="fc-main" href="${fileUrl(a)}" target="_blank" rel="noopener" title="${esc(a.name)}">${ICON.file}<span class="fc-meta"><span class="fc-name">${esc(a.name)}</span><span class="fc-sub">${esc((a.name.match(/\.(\w+)$/) || ['', 'dosya'])[1].toUpperCase())} · ${fmtBytes(a.size)}</span></span></a><a class="icon-btn fc-dl" href="${fileUrl(a, true)}" download="${esc(a.name)}" title="İndir">${ICON.download}</a></div>`).join('')}</div>`;
+    return h;
+  }
+  function renderMessages(keepScroll) {
+    const el = $('msgs'); if (!el) return; const c = curChannel();
+    if ($('editTa') && !keepScroll) return;
+    const wasBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80 || !el.dataset.rendered;
+    if (!c) { el.innerHTML = `<div class="empty" style="margin:auto">${ICON.chat}<h2>Henüz kanal yok</h2><p>${canWrite() ? 'Sağ üstten ilk kanalı oluşturun.' : 'Bir yönetici kanal oluşturduğunda burada görünür.'}</p></div>`; return; }
+    if (!C.loaded) { el.innerHTML = '<div class="skeleton" style="width:50%"></div><div class="skeleton" style="width:70%"></div>'; return; }
+    const q = C.filter.trim().toLocaleLowerCase('tr');
+    const msgs = q ? C.msgs.filter(m => ((m.text || '') + ' ' + (m.att || []).map(a => a.name).join(' ')).toLocaleLowerCase('tr').includes(q)) : C.msgs;
+    let h = C.hasMore && !q ? `<button class="btn sm ghost older" data-action="older">Daha eski mesajları yükle</button>` : '';
+    if (!msgs.length) { el.innerHTML = h + `<div class="empty" style="margin:auto">${ICON.hash}<h2>${q ? 'Eşleşen mesaj yok' : '#' + esc(c.name) + ' kanalının başlangıcı'}</h2><p>${q ? 'Başka bir arama deneyin.' : (c.topic ? esc(c.topic) : 'Burada yazılan her şey saklanır; ekip aynı anda görür.')}</p></div>`; el.dataset.rendered = '1'; return; }
+    let lastDay = '', lastAuthor = null, lastT = 0, open = false;
+    for (const m of msgs) {
+      const day = dayOf(m.ts);
+      if (day !== lastDay) { if (open) { h += '</div></div>'; open = false; } h += `<div class="daysep">${fmtDay(m.ts)}</div>`; lastDay = day; lastAuthor = null; }
+      if (m.user_id !== lastAuthor || m.ts - lastT > 5 * 60000) { if (open) h += '</div></div>'; const u = userById(m.user_id) || { name: m.user_name || '—', color: m.user_color }; h += `<div class="mgroup">${avatarHtml(u, 'lg')}<div><div class="mhead"><span class="who">${esc(u.name)}</span><span class="when">${fmtTime(m.ts)}</span></div>`; open = true; }
+      const mine = m.user_id === S.me.id && canWrite(); const hasText = !!(m.text || '').trim();
+      h += `<div class="msg ${mentionsMe(m.text) ? 'mention' : ''}" data-mid="${m.id}" title="${fmtDT(m.ts)}">${hasText ? `<div class="msg-text">${inline(m.text)}${m.edited_at ? '<span class="ed">(düzenlendi)</span>' : ''}</div>` : ''}${attachmentsHtml(m)}${mine || isAdmin() ? `<div class="acts">${mine && hasText ? `<button class="icon-btn" data-action="edit-msg" data-id="${m.id}" title="Düzenle">${ICON.edit}</button>` : ''}<button class="icon-btn" data-action="delete-msg" data-id="${m.id}" title="Sil">${ICON.trash}</button></div>` : ''}</div>`;
+      lastAuthor = m.user_id; lastT = m.ts;
+    }
+    if (open) h += '</div></div>';
+    el.innerHTML = h; el.dataset.rendered = '1';
+    if (wasBottom && !keepScroll) el.scrollTop = el.scrollHeight;
+  }
+  function startEdit(mid) {
+    const m = C.msgs.find(x => x.id === mid); const box = document.querySelector(`.msg[data-mid="${mid}"]`); if (!m || !box) return;
+    box.innerHTML = `<div class="edit"><textarea id="editTa" rows="2">${esc(m.text)}</textarea><div class="r"><button class="btn primary sm" data-action="save-edit" data-id="${mid}">Kaydet</button><button class="btn sm" data-action="cancel-edit">Vazgeç</button><span class="muted">Enter kaydeder · Esc vazgeçer</span></div></div>`;
+    const ta = $('editTa'); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(mid); } if (e.key === 'Escape') { e.stopPropagation(); renderMessages(true); } });
+  }
+  async function saveEdit(mid) { const ta = $('editTa'); if (!ta) return; try { await api('PATCH', '/api/chat/messages/' + mid, { text: ta.value.trim() }); } catch (e) { toast(e.message); } renderMessages(true); }
+  function renderComposer() {
+    const wrap = $('composerWrap'); if (!wrap) return; const c = curChannel();
+    if (!c) { wrap.innerHTML = ''; return; }
+    if (c.archived) { wrap.innerHTML = `<div class="archived-note">${ICON.archive} Bu kanal arşivlenmiş; yalnızca okunabilir.${isAdmin() ? ` <button class="btn sm" data-action="unarchive-channel">Arşivden çıkar</button>` : ''}</div>`; return; }
+    if (!canWrite()) { wrap.innerHTML = `<div class="archived-note">Bu kanalı okuyabilirsiniz ancak yazamazsınız. Yazmak için yöneticiden rolünüzü "Kullanıcı" yapmasını isteyin.</div>`; return; }
+    C.pending = [];
+    wrap.innerHTML = `<div class="att-strip" id="attStrip" hidden></div><div class="mention-menu" id="mentionMenu" hidden></div>
+      <div class="composer"><button type="button" class="attach-btn" data-action="attach" title="Fotoğraf veya dosya ekle" aria-label="Fotoğraf veya dosya ekle">${ICON.paperclip}</button><input type="file" id="fileInput" hidden multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.dwg">
+      <textarea id="composer" rows="1" placeholder="#${esc(c.name)} kanalına yaz" aria-label="Mesaj">${esc(C.drafts[c.id] || '')}</textarea><button class="btn primary" id="sendBtn" data-action="send" aria-label="Gönder">${ICON.send}</button></div>
+      <div class="hint">Enter gönderir · Shift+Enter yeni satır · @ad ile birine seslenin · fotoğraf yapıştırabilir veya sürükleyebilirsiniz · **kalın**, \`kod\` ve bağlantılar desteklenir</div>`;
+    const ta = $('composer'); autoGrow(ta);
+    ta.addEventListener('input', () => { autoGrow(ta); emitTyping(); C.drafts[c.id] = ta.value; updateMention(ta); });
+    ta.addEventListener('keydown', (e) => {
+      if (C.mention) { const items = C.mention.items; if (e.key === 'ArrowDown') { e.preventDefault(); C.mention.i = (C.mention.i + 1) % items.length; renderMentionMenu(); return; } if (e.key === 'ArrowUp') { e.preventDefault(); C.mention.i = (C.mention.i - 1 + items.length) % items.length; renderMentionMenu(); return; } if ((e.key === 'Enter' || e.key === 'Tab') && items.length) { e.preventDefault(); insertMention(items[C.mention.i].name); return; } }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFromComposer(); }
+    });
+    ta.addEventListener('blur', () => setTimeout(() => { if (!document.activeElement || !document.activeElement.closest('#mentionMenu')) { C.mention = null; renderMentionMenu(); } }, 150));
+  }
+  function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(200, ta.scrollHeight) + 'px'; }
+  let typingLast = 0;
+  function emitTyping() { if (!ws || ws.readyState !== 1 || !C.cid) return; const now = Date.now(); if (now - typingLast < 2000) return; typingLast = now; ws.send(JSON.stringify({ t: 'typing', cid: C.cid })); }
+  let typingTicker = null;
+  function startTypingTicker() { if (typingTicker) return; typingTicker = setInterval(renderTyping, 1000); }
+  function stopTypingTicker() { if (typingTicker) { clearInterval(typingTicker); typingTicker = null; } }
+  function renderTyping() { const el = $('typing'); if (!el) return; const t = C.typing[C.cid] || {}; const now = Date.now(); const who = Object.keys(t).filter(k => t[k].until > now).map(k => t[k].name); for (const k in t) if (t[k].until <= now) delete t[k]; el.textContent = who.length ? who.join(', ') + ' yazıyor…' : ''; }
+  // @bahsetme menüsü
+  function updateMention(ta) {
+    const upto = ta.value.slice(0, ta.selectionStart); const m = upto.match(/(^|\s)@([^\s@]*)$/u);
+    if (!m) { if (C.mention) { C.mention = null; renderMentionMenu(); } return; }
+    const q = m[2].toLocaleLowerCase('tr'); const items = S.team.filter(u => u.id !== S.me.id && u.name.toLocaleLowerCase('tr').includes(q)).slice(0, 6);
+    C.mention = { start: ta.selectionStart - m[2].length - 1, end: ta.selectionStart, items, i: 0 }; renderMentionMenu();
+  }
+  function renderMentionMenu() { const el = $('mentionMenu'); if (!el) return; if (!C.mention || !C.mention.items.length) { el.hidden = true; return; } el.innerHTML = C.mention.items.map((u, i) => `<button type="button" class="${i === C.mention.i ? 'on' : ''}" data-action="pick-mention" data-name="${esc(u.name)}">${avatarHtml(u, 'sm')} ${esc(u.name)} <span class="muted small">${ROLE[u.role] || ''}</span></button>`).join(''); el.hidden = false; }
+  function insertMention(name) { const ta = $('composer'); if (!ta || !C.mention) return; const v = ta.value; ta.value = v.slice(0, C.mention.start) + '@' + name + ' ' + v.slice(C.mention.end); const pos = C.mention.start + name.length + 2; C.mention = null; renderMentionMenu(); ta.focus(); ta.setSelectionRange(pos, pos); autoGrow(ta); C.drafts[C.cid] = ta.value; }
+  // ekler
+  async function shrinkImage(file) {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return { blob: file, w: null, h: null };
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+      const max = 1600; const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      if (k === 1 && file.size < 1.5 * 1048576) return { blob: file, w: img.naturalWidth, h: img.naturalHeight };
+      const cv = document.createElement('canvas'); cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      const blob = await new Promise(res => cv.toBlob(res, type, 0.86));
+      return { blob: blob || file, w: cv.width, h: cv.height, type };
+    } catch (e) { return { blob: file, w: null, h: null }; } finally { URL.revokeObjectURL(url); }
+  }
+  function addFiles(files) {
+    if (!$('composer')) return;
+    for (const f of files) {
+      if (f.size > 25 * 1048576) { toast(`${f.name}: 25 MB sınırını aşıyor.`); continue; }
+      const it = { id: 'p' + Math.random().toString(36).slice(2), file: f, name: f.name, status: 'uploading', preview: /^image\//.test(f.type) ? URL.createObjectURL(f) : null, up: null };
+      C.pending.push(it); it.done = uploadPending(it);
+    }
+    renderAttStrip();
+  }
+  async function uploadPending(it) {
+    try {
+      const { blob, w, h, type } = await shrinkImage(it.file);
+      const mime = type || it.file.type || 'application/octet-stream';
+      const q = new URLSearchParams({ name: it.name, type: mime }); if (w) { q.set('w', w); q.set('h', h); }
+      const r = await fetch('/api/upload?' + q, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': mime }, body: blob });
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw (j && j.error) || { message: 'Yükleme başarısız (' + r.status + ')' };
+      it.up = j; it.status = 'done';
+    } catch (e) { it.status = 'error'; it.err = e.message || 'Yüklenemedi'; }
+    renderAttStrip();
+  }
+  function removePending(id) { const it = C.pending.find(x => x.id === id); if (it && it.preview) URL.revokeObjectURL(it.preview); C.pending = C.pending.filter(x => x.id !== id); renderAttStrip(); }
+  function renderAttStrip() {
+    const el = $('attStrip'); if (!el) return; if (!C.pending.length) { el.hidden = true; el.innerHTML = ''; return; }
+    el.innerHTML = C.pending.map(it => `<div class="att-item ${it.status}">${it.preview ? `<img src="${it.preview}" alt="">` : `<span class="att-ico">${ICON.file}</span>`}<span class="att-meta"><span class="att-name">${esc(it.name)}</span><span class="att-sub">${it.status === 'error' ? esc(it.err) : it.status === 'done' ? fmtBytes(it.up.size) + ' · hazır' : 'yükleniyor…'}</span><span class="att-bar"><i></i></span></span><button type="button" class="att-x" data-action="remove-att" data-id="${it.id}" aria-label="Kaldır">${ICON.x}</button></div>`).join('');
+    el.hidden = false;
+  }
+  let sending = false;
+  async function sendFromComposer() {
+    const ta = $('composer'); if (!ta || sending || !C.cid) return; const text = ta.value.trim();
+    const pending = C.pending.slice(); if (!text && !pending.length) return;
+    if (pending.some(it => it.status === 'error')) { toast('Bir dosya yüklenemedi. Kaldırıp yeniden deneyin.'); return; }
+    const btn = $('sendBtn'); sending = true; if (btn) btn.classList.add('busy');
+    try {
+      await Promise.all(pending.map(it => it.done));
+      if (pending.some(it => it.status === 'error')) { toast('Bir dosya yüklenemedi. Kaldırıp yeniden deneyin.'); return; }
+      const att = pending.filter(it => it.up).map(it => ({ id: it.up.id }));
+      const cid = C.cid;
+      await api('POST', `/api/chat/channels/${cid}/messages`, { text, att });
+      ta.value = ''; autoGrow(ta); delete C.drafts[cid]; for (const it of C.pending) if (it.preview) URL.revokeObjectURL(it.preview); C.pending = []; renderAttStrip(); C.mention = null; renderMentionMenu();
+    } catch (e) { toast(e.message); } finally { sending = false; const b = $('sendBtn'); if (b) b.classList.remove('busy'); if ($('composer')) $('composer').focus(); }
+  }
+  function channelForm(c) {
+    const edit = !!c;
+    modal(modalHead(edit ? 'Kanalı düzenle' : 'Yeni kanal', edit ? '#' + esc(c.name) : '') + `<form id="chForm"><div id="err" class="err" hidden></div>
+      <label class="f">Kanal adı<input type="text" name="name" value="${edit ? esc(c.name) : ''}" required autofocus placeholder="sevkiyat, sayim, duyurular" pattern="[a-z0-9çğıöşü][a-z0-9çğıöşü_\\-]{0,31}" title="Küçük harf, rakam, tire ve alt çizgi"></label>
+      <label class="f">Konu <span class="muted" style="font-weight:400">(isteğe bağlı)</span><input type="text" name="topic" value="${edit ? esc(c.topic || '') : ''}" placeholder="Bu kanal ne için?"></label>
+      <div class="form-actions"><div class="right"><button type="button" class="btn" data-action="close-modal">Vazgeç</button><button class="btn primary" type="submit">${edit ? 'Kaydet' : 'Kanalı oluştur'}</button></div></div></form>`, 'narrow');
+    $('chForm').addEventListener('submit', async (e) => { e.preventDefault(); const f = e.target; try { const r = edit ? await api('PATCH', '/api/chat/channels/' + c.id, { name: f.name.value, topic: f.topic.value }) : await api('POST', '/api/chat/channels', { name: f.name.value, topic: f.topic.value }); closeModal(); if (!edit) go('#/sohbet/' + r.channel.id); } catch (err) { $('err').textContent = err.message; $('err').hidden = false; } });
+  }
+  // fotoğraf görüntüleyici
+  function openLightbox(id) {
+    const photos = []; for (const m of C.msgs) for (const a of m.att || []) if (isImg(a.mime)) photos.push({ ...a, by: m.user_name, ts: m.ts });
+    const i = photos.findIndex(p => p.id === id); if (i < 0) return; S.lb = { photos, i }; renderLightbox(); document.body.classList.add('lb-open');
+  }
+  function renderLightbox() {
+    const el = $('lightbox'); if (!S.lb) { el.hidden = true; el.innerHTML = ''; return; } const p = S.lb.photos[S.lb.i]; const n = S.lb.photos.length;
+    el.innerHTML = `<div class="lb-top"><div class="lb-title"><strong>${esc(p.name)}</strong><span class="muted">${esc(p.by || '')} · ${fmtDT(p.ts)} · ${fmtBytes(p.size)}</span></div><div class="lb-actions"><a class="icon-btn" href="${fileUrl(p, true)}" download="${esc(p.name)}" title="İndir">${ICON.download}</a><button class="icon-btn" data-action="lb-close" title="Kapat">${ICON.x}</button></div></div>
+      <div class="lb-stage" data-action="lb-close"><img src="${fileUrl(p)}" alt="${esc(p.name)}" data-stop="1"></div>
+      ${n > 1 ? `<button class="lb-nav prev" data-action="lb-prev" ${S.lb.i === 0 ? 'disabled' : ''}>${ICON.left}</button><button class="lb-nav next" data-action="lb-next" ${S.lb.i === n - 1 ? 'disabled' : ''}>${ICON.right}</button><span class="lb-count">${S.lb.i + 1} / ${n}</span>` : ''}`;
+    el.hidden = false;
+  }
+  function closeLightbox() { S.lb = null; renderLightbox(); document.body.classList.remove('lb-open'); }
+  function stepLightbox(d) { if (!S.lb) return; const j = S.lb.i + d; if (j < 0 || j >= S.lb.photos.length) return; S.lb.i = j; renderLightbox(); }
 
   // ---------- olaylar ----------
   document.addEventListener('click', async (e) => {
@@ -513,7 +787,25 @@
       case 'new-material': if (!canWrite()) return toast('Hesabınız yalnızca görüntüleme yetkisine sahip.'); materialForm(); break;
       case 'edit-material': if (S.view === 'material' && S.matId === d.id) materialForm(S.matById.get(d.id)); else { S.matDetail = null; materialForm(S.matById.get(d.id)); } break;
       case 'set-limit': limitForm(S.matById.get(d.id)); break;
-      case 'delete-material': if (!confirm('Bu malzeme kartı silinsin mi? Bu işlem geri alınamaz.')) return; try { await api('DELETE', '/api/materials/' + d.id, {}); toast('Kart silindi.'); go('#/malzemeler'); } catch (err) { toast(err.message); } break;
+      case 'delete-material': deleteMaterialForm(d.id); break;
+      case 'restore-material': try { const r = await api('POST', '/api/materials/' + d.id + '/restore', {}); setMaterial(r.material); toast('Kart geri alındı.'); loadMaterials().then(() => { renderRail(); renderChips(); }); if (d.from === 'settings') settingsModal(); else go('#/malzeme/' + d.id); } catch (err) { toast(err.message); } break;
+      case 'new-channel': channelForm(); break;
+      case 'edit-channel': channelForm(curChannel()); break;
+      case 'archive-channel': case 'unarchive-channel': try { await api('PATCH', '/api/chat/channels/' + S.chat.cid, { archived: a === 'archive-channel' }); } catch (err) { toast(err.message); } break;
+      case 'select-channel': go('#/sohbet/' + d.id); break;
+      case 'older': loadMessages(true); break;
+      case 'send': sendFromComposer(); break;
+      case 'attach': { const fi = $('fileInput'); if (fi) fi.click(); } break;
+      case 'remove-att': removePending(d.id); break;
+      case 'edit-msg': startEdit(d.id); break;
+      case 'save-edit': saveEdit(d.id); break;
+      case 'cancel-edit': renderMessages(true); break;
+      case 'delete-msg': if (!confirm('Bu mesaj silinsin mi?')) return; try { await api('DELETE', '/api/chat/messages/' + d.id, {}); } catch (err) { toast(err.message); } break;
+      case 'view-photo': openLightbox(d.id); break;
+      case 'lb-close': closeLightbox(); break;
+      case 'lb-prev': stepLightbox(-1); break;
+      case 'lb-next': stepLightbox(1); break;
+      case 'pick-mention': insertMention(d.name); break;
       case 'new-movement': if (!canWrite()) return toast('Hesabınız yalnızca görüntüleme yetkisine sahip.'); movementForm(d.kind, d.material); break;
       case 'form-kind': F.kind = d.kind; renderFormKind(); renderLines(); break;
       case 'add-line': addLine(); break;
@@ -531,7 +823,7 @@
       case 'open-inbox': S.inboxOpen = !S.inboxOpen; renderInbox(); if (S.inboxOpen) markInboxSeen(); break;
       case 'close-inbox': S.inboxOpen = false; renderInbox(); break;
       case 'inbox-read-all': markInboxSeen(); renderInbox(); break;
-      case 'inbox-go': { let ref = {}; try { ref = JSON.parse(d.ref); } catch (err) {} S.inboxOpen = false; renderInbox(); if (ref.movementId) openMovement(ref.movementId); else if (ref.materialId) go('#/malzeme/' + ref.materialId); else if (ref.alertId) go('#/alarmlar'); } break;
+      case 'inbox-go': { let ref = {}; try { ref = JSON.parse(d.ref); } catch (err) {} S.inboxOpen = false; renderInbox(); if (ref.channelId) go('#/sohbet/' + ref.channelId); else if (ref.movementId) openMovement(ref.movementId); else if (ref.materialId) go('#/malzeme/' + ref.materialId); else if (ref.alertId) go('#/alarmlar'); } break;
       case 'close-modal': closeModal(); F = null; break;
       case 'copy': try { await navigator.clipboard.writeText(d.text); toast('Kopyalandı.'); } catch (err) { toast('Kopyalanamadı; bağlantıyı seçip kopyalayın.'); } break;
       case 'user-reset': try { const r = await api('POST', '/api/admin/users/' + d.id + '/reset', {}); teamModal(linkNote('Kullanıcı', r.inviteUrl, r.emailed)); } catch (err) { toast(err.message); } break;
@@ -550,12 +842,21 @@
   document.addEventListener('input', (e) => {
     if (e.target.id === 'search') { S.q = e.target.value; renderRail(); if (S.view === 'materials') renderPaneBody(); }
     else if (e.target.dataset.action === 'mv-q') { clearTimeout(qTimer); qTimer = setTimeout(() => { S.mv.q = e.target.value; S.mv.offset = 0; loadMovements(); }, 250); }
+    else if (e.target.id === 'msgSearch') { S.chat.filter = e.target.value; renderMessages(true); }
   });
+  document.addEventListener('change', (e) => { if (e.target.id === 'fileInput') { addFiles([...e.target.files]); e.target.value = ''; } });
+  document.addEventListener('paste', (e) => { if (!$('composer') || !e.clipboardData) return; const files = [...e.clipboardData.files || []]; if (files.length) { e.preventDefault(); addFiles(files); } });
+  document.addEventListener('dragover', (e) => { const cm = $('chatMain'); if (cm && canWrite()) { e.preventDefault(); cm.classList.add('drop-on'); } });
+  document.addEventListener('dragleave', (e) => { const cm = $('chatMain'); if (cm && !e.relatedTarget) cm.classList.remove('drop-on'); });
+  document.addEventListener('drop', (e) => { const cm = $('chatMain'); if (!cm) return; e.preventDefault(); cm.classList.remove('drop-on'); if (canWrite() && e.dataTransfer) addFiles([...e.dataTransfer.files || []]); });
+  window.addEventListener('focus', () => { if (S.view === 'chat' && S.chat.cid && S.chat.msgs.length) markChannelRead(S.chat.cid, S.chat.msgs[S.chat.msgs.length - 1].ts); });
   $('showInactive').addEventListener('change', (e) => { S.showInactive = e.target.checked; renderRail(); if (S.view === 'materials') renderPaneBody(); });
   $('ntoast').addEventListener('click', () => { const n = $('ntoast'); n.hidden = true; n.classList.remove('show'); if (n.dataset.href) go(n.dataset.href); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('modalRoot').hidden) { closeModal(); F = null; } else if (S.inboxOpen) { S.inboxOpen = false; renderInbox(); } } if (e.key === '/' && !e.target.closest('input,textarea,select') && $('modalRoot').hidden) { e.preventDefault(); $('search').focus(); } });
+  document.addEventListener('keydown', (e) => { if (S.lb) { if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); } else if (e.key === 'ArrowLeft') stepLightbox(-1); else if (e.key === 'ArrowRight') stepLightbox(1); return; } if (e.key === 'Escape') { if (S.chat.mention) { S.chat.mention = null; renderMentionMenu(); return; } if (!$('modalRoot').hidden) { closeModal(); F = null; } else if (S.inboxOpen) { S.inboxOpen = false; renderInbox(); } } if (e.key === '/' && !e.target.closest('input,textarea,select') && $('modalRoot').hidden) { e.preventDefault(); $('search').focus(); } });
   window.addEventListener('desk:settings', () => settingsModal());
   window.addEventListener('desk:open', (e) => { const url = e.detail && e.detail.url; if (url && url.startsWith('/#')) go(url.slice(1)); });
+  // inbox entries that point to a channel
+  const _inboxGo = (ref) => { if (ref.channelId) { go('#/sohbet/' + ref.channelId); return true; } return false; };
   window.addEventListener('focus', () => { if (S.view === 'dashboard') loadDashboard(); });
 
   applyTheme();

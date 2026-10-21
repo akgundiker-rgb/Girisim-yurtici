@@ -42,6 +42,7 @@ const PUSH_ON = push.init(process.env.VAPID_SUBJECT || (BASE_URL.startsWith('htt
 
 const db = open(DATA_DIR);
 const repo = new Repo(db);
+if (repo.userCount() > 0) repo.ensureGeneralChannel(null);
 setInterval(() => repo.purgeSessions(), 6 * 3600000).unref();
 
 const app = express();
@@ -77,7 +78,7 @@ function auth(req, res, next) {
 function admin(req, res, next) { if (req.user.role !== 'admin') return fail(res, 403, 'forbidden', 'Bu işlem yalnızca yöneticilere açıktır.'); next(); }
 function writer(req, res, next) { if (!canWrite(req.user)) return fail(res, 403, 'forbidden', 'Hesabınız yalnızca görüntüleme yetkisine sahip.'); next(); }
 // Değişiklik yapan JSON istekleri JSON gövdesi taşımalı — SameSite çerezleriyle birlikte basit bir CSRF önlemi.
-function jsonOnly(req, res, next) { if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !req.is('application/json')) return fail(res, 415, 'bad_request', 'JSON gönderin.'); next(); }
+function jsonOnly(req, res, next) { if (req.path === '/upload') return next(); if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && !req.is('application/json')) return fail(res, 415, 'bad_request', 'JSON gönderin.'); next(); }
 app.use('/api', jsonOnly);
 
 // ---------- ayarlar (şirket bilgisi, alarm davranışı) ----------
@@ -101,6 +102,7 @@ app.post('/api/setup', (req, res) => {
   if (!validEmail(email) || !name || !password || password.length < 8) return fail(res, 400, 'bad_request', 'Ad, geçerli bir e-posta ve en az 8 karakterlik bir şifre gerekir.');
   const u = repo.createUser({ email, name, role: 'admin', password, active: true });
   repo.addActivity({ kind: 'team', userId: u.id, title: `${u.name} çalışma alanını kurdu`, text: 'İlk yönetici hesabı oluşturuldu.' });
+  repo.ensureGeneralChannel(u.id);
   setSessionCookie(res, repo.createSession(u.id, req.headers['user-agent']));
   res.json({ me: publicUser(u) });
 });
@@ -145,7 +147,7 @@ app.post('/api/forgot', async (req, res) => {
 
 app.get('/api/me', auth, (req, res) => {
   const s = settings();
-  res.json({ me: publicUser(req.user), app: APP_NAME, push: PUSH_ON, mail: mail.configured(), tz: TZ, settings: { company: s.company, allowNegative: !!s.allowNegative, alertEmails: req.user.role === 'admin' ? s.alertEmails : undefined, alertPushAll: !!s.alertPushAll }, team: repo.activeUsers().map(u => ({ id: u.id, name: u.name, color: u.color, role: u.role })), warning: PERSIST_WARNING, inboxSeen: req.user.inbox_seen, unread: repo.unreadCount(req.user.id, req.user.inbox_seen) });
+  res.json({ me: publicUser(req.user), app: APP_NAME, push: PUSH_ON, mail: mail.configured(), tz: TZ, settings: { company: s.company, allowNegative: !!s.allowNegative, alertEmails: req.user.role === 'admin' ? s.alertEmails : undefined, alertPushAll: !!s.alertPushAll }, team: repo.activeUsers().map(u => ({ id: u.id, name: u.name, color: u.color, role: u.role })), warning: PERSIST_WARNING, inboxSeen: req.user.inbox_seen, unread: repo.unreadCount(req.user.id, req.user.inbox_seen), chatUnread: repo.unreadChat(req.user.id) });
 });
 app.post('/api/me', auth, (req, res) => {
   const f = {}; const { name, alert_mail } = req.body || {};
@@ -247,6 +249,7 @@ function cleanMaterial(b, partial) {
   return { f };
 }
 app.get('/api/materials', auth, (req, res) => res.json({ materials: repo.listMaterials(req.query.all === '1'), categories: repo.categories(), locations: repo.locations(), units: repo.units() }));
+app.get('/api/materials/deleted', auth, admin, (req, res) => res.json({ materials: repo.listDeletedMaterials() }));
 app.get('/api/materials/:id', auth, (req, res) => {
   const m = repo.materialRow(req.params.id); if (!m) return fail(res, 404, 'not_found', 'Malzeme bulunamadı.');
   res.json({ material: { ...m, open_alert: (repo.openAlert(m.id) || {}).id || null }, history: repo.materialHistory(m.id, 300), alerts: db.prepare('SELECT * FROM alerts WHERE material_id = ? ORDER BY opened_at DESC LIMIT 20').all(m.id) });
@@ -273,13 +276,25 @@ app.patch('/api/materials/:id', auth, writer, (req, res) => {
   evaluateAlerts([m.id], null, req.user);
   res.json({ material: withAlert(repo.materialRow(m.id)) });
 });
+// Yönetici bir kartı gerekli gördüğünde siler. Hareketi olmayan kart kalıcı olarak silinir; hareketi olan kart listelerden,
+// aramalardan ve alarmlardan kaldırılır ama geçmiş belgeleri ve PDF fişleri değişmez (yönetici ayarlarından geri alınabilir).
 app.delete('/api/materials/:id', auth, admin, (req, res) => {
-  const m = repo.materialRow(req.params.id); if (!m) return res.json({ ok: true });
-  if (repo.materialHasMovements(m.id)) return fail(res, 409, 'has_movements', 'Bu malzemenin hareketleri var; silinemez. Bunun yerine pasife alın.');
-  repo.deleteMaterial(m.id);
-  activity({ kind: 'material', userId: req.user.id, title: `${m.name} silindi`, text: m.code });
+  const m = repo.materialRow(req.params.id); if (!m || m.deleted_at) return res.json({ ok: true, mode: 'none' });
+  const openAlert = repo.openAlert(m.id);
+  const mode = repo.deleteMaterial(m.id, req.user.id);
+  activity({ kind: 'material', userId: req.user.id, title: `${m.name} silindi`, text: mode === 'soft' ? `${m.code} · hareket geçmişi ve fişler saklandı` : `${m.code} · kalıcı olarak silindi`, ref: mode === 'soft' ? { materialId: m.id } : null });
   broadcast({ t: 'material', material: { id: m.id }, removed: true });
-  res.json({ ok: true });
+  if (openAlert) broadcast({ t: 'alert', alert: repo.alertRow(openAlert.id), resolved: true });
+  res.json({ ok: true, mode });
+});
+app.post('/api/materials/:id/restore', auth, admin, (req, res) => {
+  const m = repo.materialRow(req.params.id); if (!m || !m.deleted_at) return fail(res, 404, 'not_found', 'Silinmiş kart bulunamadı.');
+  const clash = repo.materialByCode(m.code); if (clash) return fail(res, 409, 'exists', `"${m.code}" kodu artık başka bir kartta kullanılıyor (${clash.name}). Önce o kartın kodunu değiştirin.`);
+  const r = repo.restoreMaterial(m.id, req.user.id);
+  activity({ kind: 'material', userId: req.user.id, title: `${r.name} geri alındı`, text: r.code, ref: { materialId: r.id } });
+  broadcast({ t: 'material', material: withAlert(r) });
+  evaluateAlerts([r.id], null, req.user);
+  res.json({ material: withAlert(repo.materialRow(r.id)) });
 });
 function withAlert(m) { if (!m) return m; return { ...m, open_alert: (repo.openAlert(m.id) || {}).id || null }; }
 
@@ -305,6 +320,7 @@ app.post('/api/movements', auth, writer, (req, res) => {
   const lines = [];
   for (const l of rawLines) {
     const m = repo.materialRow(str(l && l.material_id, 60)); if (!m) return fail(res, 400, 'bad_request', 'Satırlardan birinde geçersiz malzeme var.');
+    if (m.deleted_at) return fail(res, 400, 'bad_request', `"${m.name}" kartı silinmiş; hareket girilemez.`);
     if (!m.active) return fail(res, 400, 'bad_request', `"${m.name}" pasif durumda; hareket girilemez.`);
     const q = num(l.qty);
     if (Number.isNaN(q) || q === 0 || (kind !== 'adj' && q < 0)) return fail(res, 400, 'bad_request', `"${m.name}" için miktar ${kind === 'adj' ? 'sıfırdan farklı (artı veya eksi) ' : 'pozitif '}bir sayı olmalıdır.`);
@@ -421,6 +437,106 @@ async function notifyAlert(a, m, mv, s) {
   repo.setAlertNotified(a.id, info);
 }
 
+// ---------- sohbet ----------
+const CH_NAME = /^[a-z0-9çğıöşü][a-z0-9çğıöşü_-]{0,31}$/;
+const normChannel = (n) => String(n || '').trim().toLocaleLowerCase('tr').replace(/\s+/g, '-');
+app.get('/api/chat/channels', auth, (req, res) => res.json({ channels: repo.listChannels(req.user.id), unread: repo.unreadChat(req.user.id) }));
+app.post('/api/chat/channels', auth, writer, (req, res) => {
+  const name = normChannel((req.body || {}).name); const topic = str((req.body || {}).topic, 200);
+  if (!CH_NAME.test(name)) return fail(res, 400, 'bad_request', 'Kanal adı 1–32 karakter olmalı; küçük harf, rakam, tire ve alt çizgi kullanılabilir.');
+  if (repo.channelByName(name)) return fail(res, 409, 'exists', 'Bu adda bir kanal zaten var.');
+  const c = repo.createChannel(name, topic, req.user.id);
+  activity({ kind: 'chat', userId: req.user.id, title: `Yeni kanal: #${c.name}`, text: topic, ref: { channelId: c.id } });
+  broadcast({ t: 'channel', channel: { ...c, archived: !!c.archived } });
+  res.json({ channel: c });
+});
+app.patch('/api/chat/channels/:id', auth, writer, (req, res) => {
+  const c = repo.channelRow(req.params.id); if (!c) return fail(res, 404, 'not_found', 'Kanal bulunamadı.');
+  const b = req.body || {}; const f = {};
+  if (b.name !== undefined) { const n = normChannel(b.name); if (!CH_NAME.test(n)) return fail(res, 400, 'bad_request', 'Geçersiz kanal adı.'); const o = repo.channelByName(n); if (o && o.id !== c.id) return fail(res, 409, 'exists', 'Bu adda bir kanal zaten var.'); f.name = n; }
+  if (b.topic !== undefined) f.topic = str(b.topic, 200);
+  if (typeof b.archived === 'boolean') { if (req.user.role !== 'admin') return fail(res, 403, 'forbidden', 'Kanalları yalnızca yöneticiler arşivler.'); f.archived = b.archived; }
+  const r = repo.updateChannel(c.id, f);
+  if (f.archived !== undefined) activity({ kind: 'chat', userId: req.user.id, title: `#${r.name} ${f.archived ? 'arşivlendi' : 'arşivden çıkarıldı'}`, text: '', ref: { channelId: r.id } });
+  broadcast({ t: 'channel', channel: { ...r, archived: !!r.archived } });
+  res.json({ channel: r });
+});
+app.get('/api/chat/channels/:id/messages', auth, (req, res) => {
+  const c = repo.channelRow(req.params.id); if (!c) return fail(res, 404, 'not_found', 'Kanal bulunamadı.');
+  const before = Number(req.query.before) || 0; const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60));
+  res.json(repo.listMessages(c.id, before, limit));
+});
+app.get('/api/chat/channels/:id/export', (req, res) => {
+  const u = repo.userBySession(parseCookies(req.headers.cookie)[COOKIE]); if (!u) return res.status(401).type('text').send('Giriş yapın.');
+  const c = repo.channelRow(req.params.id); if (!c) return res.status(404).type('text').send('Kanal bulunamadı.');
+  const msgs = repo.channelMessagesForExport(c.id); const dt = (ts) => new Intl.DateTimeFormat('tr-TR', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(ts));
+  let md = `# #${c.name}\n\n${c.topic ? c.topic + '\n\n' : ''}Dışa aktarım: ${dt(Date.now())} · ${u.name} · ${msgs.length} mesaj\n\n---\n\n`;
+  for (const m of msgs) md += `**${m.user_name || '—'}** · ${dt(m.ts)}${m.edited_at ? ' (düzenlendi)' : ''}\n${m.text || ''}${m.att.length ? '\n' + m.att.map(a => `${/^image\//.test(a.mime) ? '!' : ''}[${a.name}](${BASE_URL}/files/${a.id}/${encodeURIComponent(a.name)})`).join('\n') : ''}\n\n`;
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8'); res.setHeader('Content-Disposition', 'attachment; filename*=UTF-8\'\'' + encodeURIComponent(`sohbet-${c.name}-${todayIso()}.md`)); res.send(md);
+});
+function mentionedUsers(text) {
+  const t = String(text || '').toLocaleLowerCase('tr'); if (!t.includes('@')) return [];
+  return repo.activeUsers().filter(u => { const full = u.name.toLocaleLowerCase('tr'); const first = full.split(/\s+/)[0]; return t.includes('@' + full) || new RegExp('@' + first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}_])', 'u').test(t); });
+}
+app.post('/api/chat/channels/:id/messages', auth, writer, async (req, res) => {
+  const c = repo.channelRow(req.params.id); if (!c) return fail(res, 404, 'not_found', 'Kanal bulunamadı.');
+  if (c.archived) return fail(res, 409, 'archived', 'Bu kanal arşivlenmiş; yazılamaz.');
+  const b = req.body || {}; const text = str(b.text, 4000);
+  const att = (Array.isArray(b.att) ? b.att : []).slice(0, 10).map(a => repo.fileGet(str(a && a.id, 40))).filter(Boolean).map(f => ({ id: f.id, name: f.name, mime: f.mime, size: f.size, w: f.w, h: f.h }));
+  if (!text && !att.length) return fail(res, 400, 'bad_request', 'Boş mesaj gönderilemez.');
+  const m = repo.createMessage(c.id, req.user.id, text, att);
+  broadcast({ t: 'chat', message: m, channelId: c.id });
+  const mentioned = mentionedUsers(text).filter(u => u.id !== req.user.id);
+  for (const u of mentioned) activity({ kind: 'chat', userId: req.user.id, title: `#${c.name}: ${req.user.name} sizden bahsetti`, text: text.slice(0, 140), ref: { channelId: c.id, messageId: m.id, forUser: u.id } });
+  if (PUSH_ON) {
+    const online = new Set([...clients].map(x => x.user.id));
+    const targets = repo.activeUsers().filter(u => u.id !== req.user.id && (!online.has(u.id) || mentioned.some(x => x.id === u.id))).map(u => u.id);
+    const preview = text ? text.slice(0, 120) : (att.length === 1 ? att[0].name : att.length + ' dosya');
+    push.sendTo(repo, repo.pushSubs(targets), { kind: 'chat', title: `#${c.name} · ${req.user.name}`, body: preview, tag: 'chat-' + c.id, url: '/#/sohbet/' + c.id }).catch(() => {});
+  }
+  res.json({ message: m });
+});
+app.patch('/api/chat/messages/:id', auth, writer, (req, res) => {
+  const m = repo.messageRow(req.params.id); if (!m) return fail(res, 404, 'not_found', 'Mesaj bulunamadı.');
+  if (m.user_id !== req.user.id) return fail(res, 403, 'forbidden', 'Yalnızca kendi mesajınızı düzenleyebilirsiniz.');
+  const text = str((req.body || {}).text, 4000); if (!text && !m.att.length) return fail(res, 400, 'bad_request', 'Mesaj boş olamaz.');
+  const r = repo.editMessage(m.id, text); broadcast({ t: 'chat-edit', message: r, channelId: r.channel_id }); res.json({ message: r });
+});
+app.delete('/api/chat/messages/:id', auth, (req, res) => {
+  const m = repo.messageRow(req.params.id); if (!m) return res.json({ ok: true });
+  if (m.user_id !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'forbidden', 'Mesajı yalnızca yazan kişi veya bir yönetici silebilir.');
+  for (const f of repo.filesOfMessage(m.id)) { try { fs.unlinkSync(path.join(UPLOAD_DIR, f.id + '.' + f.ext)); } catch (e) {} repo.fileDelete(f.id); }
+  repo.deleteMessage(m.id); broadcast({ t: 'chat-del', id: m.id, channelId: m.channel_id }); res.json({ ok: true });
+});
+app.post('/api/chat/channels/:id/read', auth, (req, res) => { const ts = Number((req.body || {}).ts) || Date.now(); repo.markRead(req.user.id, req.params.id, ts); res.json({ ok: true, unread: repo.unreadChat(req.user.id) }); });
+
+// Sohbet ekleri: dosyalar veritabanının yanında (DATA_DIR/uploads) saklanır ve yalnızca giriş yapmış kullanıcılara verilir.
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads'); fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const UPLOAD_MAX = 25 * 1024 * 1024;
+const UPLOAD_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'application/pdf': 'pdf',
+  'application/msword': 'doc', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'application/vnd.ms-excel': 'xls', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt', 'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx', 'text/plain': 'txt', 'text/csv': 'csv', 'application/zip': 'zip', 'application/x-zip-compressed': 'zip', 'application/acad': 'dwg', 'image/vnd.dwg': 'dwg' };
+const safeName = (n) => String(n || 'dosya').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 120) || 'dosya';
+app.post('/api/upload', auth, writer, express.raw({ type: '*/*', limit: UPLOAD_MAX }), (req, res) => {
+  const mime = String(req.query.type || req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  const ext = UPLOAD_TYPES[mime]; if (!ext) return fail(res, 415, 'unsupported', 'Bu dosya türü desteklenmiyor. Fotoğraf (JPG, PNG, GIF, WebP), PDF, Office belgeleri, metin ve zip dosyaları kabul edilir.');
+  const buf = req.body; if (!Buffer.isBuffer(buf) || !buf.length) return fail(res, 400, 'bad_request', 'Boş dosya.');
+  const id = token(12); const name = safeName(req.query.name);
+  try { fs.writeFileSync(path.join(UPLOAD_DIR, id + '.' + ext), buf); } catch (e) { return fail(res, 500, 'server_error', 'Dosya kaydedilemedi: ' + e.message); }
+  const w = Number(req.query.w) || null, h = Number(req.query.h) || null;
+  repo.fileAdd({ id, name, mime, size: buf.length, ext, uploader: req.user.id, w, h });
+  res.json({ id, name, mime, size: buf.length, w, h, url: '/files/' + id + '/' + encodeURIComponent(name) });
+});
+app.get(['/files/:id', '/files/:id/:name'], (req, res) => {
+  const u = repo.userBySession(parseCookies(req.headers.cookie)[COOKIE]); if (!u) return res.status(401).type('text').send('Bu dosyayı açmak için giriş yapın.');
+  const f = repo.fileGet(String(req.params.id)); if (!f) return res.status(404).type('text').send('Dosya bulunamadı.');
+  const file = path.join(UPLOAD_DIR, f.id + '.' + f.ext); if (!fs.existsSync(file)) return res.status(404).type('text').send('Dosya bulunamadı.');
+  const inlineOk = /^image\//.test(f.mime) || f.mime === 'application/pdf' || f.mime === 'text/plain';
+  res.setHeader('Content-Type', f.mime); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+  res.setHeader('Content-Disposition', (inlineOk && req.query.dl === undefined ? 'inline' : 'attachment') + '; filename*=UTF-8\'\'' + encodeURIComponent(f.name));
+  res.sendFile(file);
+});
+
 // ---------- genel bakış ----------
 app.get('/api/dashboard', auth, (req, res) => {
   const today = todayIso();
@@ -439,9 +555,9 @@ app.get('/api/dashboard', auth, (req, res) => {
 });
 
 // ---------- bildirimler (zil) ----------
-app.get('/api/activity', auth, (req, res) => res.json({ items: repo.listActivity(Math.min(300, Number(req.query.limit) || 120)), seen: repo.userById(req.user.id).inbox_seen }));
+app.get('/api/activity', auth, (req, res) => res.json({ items: repo.listActivity(Math.min(300, Number(req.query.limit) || 120)).filter(a => !(a.ref && a.ref.forUser) || a.ref.forUser === req.user.id), seen: repo.userById(req.user.id).inbox_seen }));
 app.post('/api/activity/seen', auth, (req, res) => { const ts = Number((req.body || {}).ts) || Date.now(); repo.setInboxSeen(req.user.id, ts); res.json({ ok: true, seen: ts }); });
-function activity(a) { const row = repo.addActivity(a); broadcast({ t: 'activity', item: row }); return row; }
+function activity(a) { const row = repo.addActivity(a); const to = a.ref && a.ref.forUser; const msg = JSON.stringify({ t: 'activity', item: row }); for (const c of clients) if ((!to || c.user.id === to) && c.ws.readyState === 1) c.ws.send(msg); return row; }
 
 const kindName = (k) => k === 'in' ? 'Giriş' : k === 'out' ? 'Sevkiyat' : 'Düzeltme';
 const roleName = (r) => r === 'admin' ? 'yönetici' : r === 'viewer' ? 'görüntüleyici' : 'kullanıcı';
@@ -450,8 +566,9 @@ const roleName = (r) => r === 'admin' ? 'yönetici' : r === 'viewer' ? 'görünt
 const PUB = path.join(__dirname, 'public');
 const staticOpts = { maxAge: '7d', etag: true, index: false, setHeaders: (res, p) => { if (p.endsWith('.html') || p.endsWith('sw.js')) res.setHeader('Cache-Control', 'no-cache'); } };
 app.use('/fonts', express.static(path.join(PUB, 'fonts'), { maxAge: '365d', immutable: true }));
-app.use('/img', express.static(path.join(PUB, 'img'), { maxAge: '30d' }));
-app.get(['/styles.css', '/app.js', '/pwa.js', '/manifest.webmanifest', '/offline.html'], (req, res) => res.sendFile(path.join(PUB, req.path.slice(1)), { maxAge: '7d', headers: req.path === '/manifest.webmanifest' ? { 'Content-Type': 'application/manifest+json' } : undefined }));
+app.use('/img', express.static(path.join(PUB, 'img'), { maxAge: '7d', etag: true }));
+app.get(['/styles.css', '/app.js', '/pwa.js', '/offline.html'], (req, res) => res.sendFile(path.join(PUB, req.path.slice(1)), { maxAge: '7d' }));
+app.get('/manifest.webmanifest', (req, res) => res.sendFile(path.join(PUB, 'manifest.webmanifest'), { headers: { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'no-cache' } }));
 app.get('/sw.js', (req, res) => res.sendFile(path.join(PUB, 'sw.js'), { headers: { 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' } }));
 app.get(['/login', '/setup', '/invite/:token'], (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.sendFile(path.join(PUB, 'login.html')); });
 app.get('/', (req, res) => {
@@ -487,7 +604,11 @@ wss.on('connection', (ws, req, user) => {
   send(ws, { t: 'hello', peer: c.peer, me: publicUser(user), peers: peersPayload() });
   broadcastPeers();
   ws.on('pong', () => { c.alive = true; });
-  ws.on('message', (raw) => { let m; try { m = JSON.parse(raw); } catch (e) { return; } if (m && m.t === 'ping') send(ws, { t: 'pong' }); });
+  ws.on('message', (raw) => {
+    let m; try { m = JSON.parse(raw); } catch (e) { return; } if (!m) return;
+    if (m.t === 'ping') send(ws, { t: 'pong' });
+    else if (m.t === 'typing' && typeof m.cid === 'string' && canWrite(user)) { const out = JSON.stringify({ t: 'typing', cid: m.cid.slice(0, 40), by: { id: user.id, name: user.name } }); for (const o of clients) if (o !== c && o.ws.readyState === 1) o.ws.send(out); }
+  });
   ws.on('close', () => { clients.delete(c); broadcastPeers(); });
   ws.on('error', () => {});
 });

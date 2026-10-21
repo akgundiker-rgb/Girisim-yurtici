@@ -90,7 +90,7 @@
     if (document.getElementById(id) || recently(key, 14)) return;
     var b = document.createElement('div');
     b.id = id; b.className = 'pwa-banner'; b.setAttribute('role', 'dialog'); b.setAttribute('aria-label', title);
-    b.innerHTML = '<img src="/img/icon-192.png" alt="" width="40" height="40">' +
+    b.innerHTML = '<img src="/img/peakpv-icon-192.png" alt="" width="40" height="40">' +
       '<div class="pwa-text"><strong>' + title + '</strong><span>' + text + '</span></div>' +
       '<div class="pwa-actions">' + (primaryLabel ? '<button class="btn primary sm" data-role="primary">' + primaryLabel + '</button>' : '') +
       '<button class="btn ghost sm" data-role="later">Şimdi değil</button></div>';

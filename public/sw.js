@@ -2,10 +2,10 @@
    Purpose: make the app installable and open instantly. It caches only the static shell (styles, scripts, fonts, images).
    It never caches API responses, the WebSocket, or the signed-in page itself, so data is always live and sessions are never stale.
    Bump VERSION whenever the static files change; old caches are removed on activation. */
-const VERSION = 'depo-v20261019b';
+const VERSION = 'depo-v20261021';
 const SHELL = [
-  '/styles.css?v=20261019b', '/app.js?v=20261019b', '/pwa.js?v=20261019', '/offline.html',
-  '/img/peakpv-logo.png', '/img/peakpv-logo-dark.png', '/img/icon-192.png', '/img/icon-512.png', '/img/badge-96.png', '/manifest.webmanifest',
+  '/styles.css?v=20261021', '/app.js?v=20261021', '/pwa.js?v=20261021', '/offline.html',
+  '/img/peakpv-logo.png', '/img/peakpv-logo-dark.png', '/img/peakpv-icon-192.png', '/img/peakpv-icon-512.png', '/img/peakpv-badge-96.png', '/manifest.webmanifest',
   '/fonts/inter-latin-400-normal.woff2', '/fonts/inter-latin-500-normal.woff2', '/fonts/inter-latin-600-normal.woff2', '/fonts/inter-latin-700-normal.woff2',
   '/fonts/inter-latin-ext-400-normal.woff2', '/fonts/inter-latin-ext-500-normal.woff2', '/fonts/inter-latin-ext-600-normal.woff2', '/fonts/inter-latin-ext-700-normal.woff2',
   '/fonts/jetbrains-mono-latin-400-normal.woff2', '/fonts/jetbrains-mono-latin-500-normal.woff2', '/fonts/jetbrains-mono-latin-ext-400-normal.woff2', '/fonts/jetbrains-mono-latin-ext-500-normal.woff2'
@@ -29,7 +29,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/api/') || url.pathname === '/ws') return; // always live (uploads carry their own cache headers)
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/files/') || url.pathname === '/ws') return; // always live (uploads carry their own cache headers)
 
   if (req.mode === 'navigate') {
     // Pages: always revalidate with the server (sign-in state must be fresh); the offline page appears only when the network is unreachable.
@@ -56,7 +56,7 @@ self.addEventListener('push', (e) => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: 'Malzeme Takip', body: e.data ? e.data.text() : '' }; }
   e.waitUntil((async () => {
     await self.registration.showNotification(d.title || 'Malzeme Takip', {
-      body: d.body || '', icon: '/img/icon-192.png', badge: '/img/badge-96.png', tag: d.tag || 'depo', renotify: true,
+      body: d.body || '', icon: '/img/peakpv-icon-192.png', badge: '/img/peakpv-badge-96.png', tag: d.tag || 'depo', renotify: true,
       timestamp: d.ts || Date.now(), data: { url: d.url || '/' }, vibrate: d.kind === 'alert' ? [160, 80, 160, 80, 160] : [80]
     });
   })());

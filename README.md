@@ -10,7 +10,9 @@ Peak PV Solar için fabrika deposundaki malzemelerin **giriş ve sevkiyatını c
 - **Alarm** — stok, kartındaki limitin altına düşünce alarm açılır: uygulamada kırmızı şerit ve zil, telefona anlık bildirim (VAPID anahtarları girilmişse) ve e-posta (SMTP girilmişse; ekip üyeleri ve ek alıcılar). Stok limitin üstüne çıkınca alarm kendiliğinden kapanır.
 - **PDF fişi** — her belge için A4 PDF (Peak PV Solar başlığı, satırlar, önceki/kalan stok, imza kutuları); istenildiği an açılır veya indirilir.
 - **Excel/CSV dışa aktarım** — stok listesi ve filtrelenmiş hareket dökümü.
-- **Ekip** — e-posta/şifre ile giriş, davet bağlantısı, roller: yönetici (ekip, ayarlar, iptal), kullanıcı (belge ve kart girer), görüntüleyici.
+- **Sohbet** — International Desk'teki gibi kanal temelli ekip sohbeti (`#genel` hazır gelir; kullanıcılar kanal açabilir, yöneticiler arşivler). Mesajlar anında herkese ulaşır; `@ad` ile seslenme, fotoğraf ve dosya ekleri (sürükle-bırak / yapıştır), düzenleme, silme, kanal içi arama, Markdown dışa aktarım, okunmamış sayaçları ve "yazıyor…" göstergesi vardır. Anlık bildirim açıksa uygulaması kapalı olanlara yeni mesaj bildirimi gider; `@ad` ile seslenilen kişi zilde de görür.
+- **Kart silme (yönetici)** — yönetici gerekli gördüğü malzeme kartını siler. Hareketi olmayan kart kalıcı olarak silinir; hareketi olan kart listelerden, aramalardan, belge satır seçiminden ve alarmlardan kaldırılır, geçmiş belgeler ve PDF fişleri değişmez, kodu yeni bir kartta kullanılabilir ve Ayarlar → *Silinen malzeme kartları* bölümünden geri alınabilir.
+- **Ekip** — e-posta/şifre ile giriş, davet bağlantısı, roller: yönetici (ekip, ayarlar, iptal, kart silme, kanal arşivleme), kullanıcı (belge ve kart girer, sohbete yazar), görüntüleyici (yalnızca okur).
 - Telefona **Ana Ekrana Ekle** ile kurulur; koyu tema desteklenir.
 
 ## Gereksinimler
@@ -43,9 +45,13 @@ HTTPS için önüne Caddy koyun (`deploy/Caddyfile`), ya da `docker compose` ile
 - **E-posta:** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` değişkenleri. Davetler ve şifre sıfırlama da e-posta ile gider; SMTP yoksa davet bağlantısı Ekip panelinde gösterilir.
 - Yönetici ayarlarında: ek alarm alıcıları, alarm bildiriminin herkese mi yöneticilere mi gideceği, eksi stok izni ve PDF başlığındaki şirket bilgisi.
 
+## Güncelleme sonrası logo / simge eski görünüyorsa
+
+Logo ve simge dosyaları `peakpv-…` adıyla gelir; tarayıcı önbelleği eski dosyayı gösteremez. Yine de telefonun ana ekranına daha önce eklenmiş kısayol eski simgeyi saklar: kısayolu kaldırıp **Ana Ekrana Ekle** ile yeniden ekleyin. Masaüstünde sekme simgesi için bir kez sert yenileme (Ctrl+F5 / Cmd+Shift+R) yeterlidir.
+
 ## Veri ve yedek
 
-Her şey tek bir SQLite dosyasındadır: `DATA_DIR/malzeme.sqlite` (Railway'de `/data`). Ayarlar → *Veritabanı yedeği* tutarlı bir kopya indirir. Geri yüklemek için uygulamayı durdurup dosyayı değiştirin.
+Her şey tek bir SQLite dosyasındadır: `DATA_DIR/malzeme.sqlite` (Railway'de `/data`); sohbet ekleri `DATA_DIR/uploads` klasöründedir. Ayarlar → *Veritabanı yedeği* tutarlı bir kopya indirir. Geri yüklemek için uygulamayı durdurup dosyayı değiştirin.
 
 ## Yapı
 
