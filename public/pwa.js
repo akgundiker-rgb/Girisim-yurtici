@@ -126,7 +126,7 @@
     window.addEventListener('load', function () {
       setTimeout(function () {
         if (!push.supported() || push.needsInstall() || Notification.permission !== 'default' || document.getElementById('pwaBanner')) return;
-        banner('pushBanner', 'depo:push-dismissed', 'Bildirimleri açın', 'Stok limitin altına düştüğünde ve yeni giriş / sevkiyat kaydedildiğinde, uygulama kapalıyken bile haberdar olun.', 'Ayarları aç', function (close) {
+        banner('pushBanner', 'depo:push-dismissed', 'Bildirimleri açın', 'Stok limitin altına düştüğünde ve yeni giriş / çıkış kaydedildiğinde, uygulama kapalıyken bile haberdar olun.', 'Ayarları aç', function (close) {
           close(); try { window.dispatchEvent(new CustomEvent('desk:settings')); } catch (e) {}
         });
       }, 4000);

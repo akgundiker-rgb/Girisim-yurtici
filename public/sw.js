@@ -2,9 +2,9 @@
    Purpose: make the app installable and open instantly. It caches only the static shell (styles, scripts, fonts, images).
    It never caches API responses, the WebSocket, or the signed-in page itself, so data is always live and sessions are never stale.
    Bump VERSION whenever the static files change; old caches are removed on activation. */
-const VERSION = 'depo-v20261021';
+const VERSION = 'depo-v20261022';
 const SHELL = [
-  '/styles.css?v=20261021', '/app.js?v=20261021', '/pwa.js?v=20261021', '/offline.html',
+  '/styles.css?v=20261021', '/app.js?v=20261022', '/pwa.js?v=20261021', '/offline.html',
   '/img/peakpv-logo.png', '/img/peakpv-logo-dark.png', '/img/peakpv-icon-192.png', '/img/peakpv-icon-512.png', '/img/peakpv-badge-96.png', '/manifest.webmanifest',
   '/fonts/inter-latin-400-normal.woff2', '/fonts/inter-latin-500-normal.woff2', '/fonts/inter-latin-600-normal.woff2', '/fonts/inter-latin-700-normal.woff2',
   '/fonts/inter-latin-ext-400-normal.woff2', '/fonts/inter-latin-ext-500-normal.woff2', '/fonts/inter-latin-ext-600-normal.woff2', '/fonts/inter-latin-ext-700-normal.woff2',

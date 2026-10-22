@@ -310,7 +310,7 @@ app.get('/api/movements/suggest', auth, (req, res) => res.json({ orderedBy: repo
 app.get('/api/movements/:id', auth, (req, res) => { const mv = repo.movementRow(req.params.id); if (!mv) return fail(res, 404, 'not_found', 'Belge bulunamadı.'); res.json({ movement: mv }); });
 app.post('/api/movements', auth, writer, (req, res) => {
   const b = req.body || {};
-  const kind = ['in', 'out', 'adj'].includes(b.kind) ? b.kind : null; if (!kind) return fail(res, 400, 'bad_request', 'Belge türü giriş, sevkiyat veya düzeltme olmalıdır.');
+  const kind = ['in', 'out', 'adj'].includes(b.kind) ? b.kind : null; if (!kind) return fail(res, 400, 'bad_request', 'Belge türü giriş, çıkış veya düzeltme olmalıdır.');
   const doc_date = validDate(b.doc_date) ? b.doc_date : todayIso();
   const h = { kind, doc_date, ordered_by: str(b.ordered_by, 120), counterparty: str(b.counterparty, 160), reference: str(b.reference, 80), vehicle: str(b.vehicle, 40).toUpperCase(), notes: str(b.notes, 2000) };
   if (!h.ordered_by) return fail(res, 400, 'bad_request', 'Talimatı / siparişi veren kişi belirtilmelidir.');
@@ -559,7 +559,7 @@ app.get('/api/activity', auth, (req, res) => res.json({ items: repo.listActivity
 app.post('/api/activity/seen', auth, (req, res) => { const ts = Number((req.body || {}).ts) || Date.now(); repo.setInboxSeen(req.user.id, ts); res.json({ ok: true, seen: ts }); });
 function activity(a) { const row = repo.addActivity(a); const to = a.ref && a.ref.forUser; const msg = JSON.stringify({ t: 'activity', item: row }); for (const c of clients) if ((!to || c.user.id === to) && c.ws.readyState === 1) c.ws.send(msg); return row; }
 
-const kindName = (k) => k === 'in' ? 'Giriş' : k === 'out' ? 'Sevkiyat' : 'Düzeltme';
+const kindName = (k) => k === 'in' ? 'Giriş' : k === 'out' ? 'Çıkış' : 'Düzeltme';
 const roleName = (r) => r === 'admin' ? 'yönetici' : r === 'viewer' ? 'görüntüleyici' : 'kullanıcı';
 
 // ---------- statik dosyalar ve sayfalar ----------

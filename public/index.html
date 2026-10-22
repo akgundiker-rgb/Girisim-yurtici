@@ -27,12 +27,12 @@
       <div class="menu nav-menu" id="navMenu" hidden>
         <button data-action="nav" data-view="dashboard"><svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg> Genel bakış</button>
         <button data-action="nav" data-view="materials"><svg class="i" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4-8-4zM4 7v10l8 4 8-4V7M12 11v10"/></svg> Malzemeler ve stok</button>
-        <button data-action="nav" data-view="movements"><svg class="i" viewBox="0 0 24 24"><path d="M4 9h12l-3-3M20 15H8l3 3"/></svg> Hareketler (giriş / sevkiyat)</button>
+        <button data-action="nav" data-view="movements"><svg class="i" viewBox="0 0 24 24"><path d="M4 9h12l-3-3M20 15H8l3 3"/></svg> Hareketler (giriş / çıkış)</button>
         <button data-action="nav" data-view="alerts"><svg class="i" viewBox="0 0 24 24"><path d="M12 3l9 16H3zM12 10v4M12 17.5v.5"/></svg> Alarmlar</button>
         <button data-action="nav" data-view="chat"><svg class="i" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg> Sohbet</button>
         <div class="sep"></div>
         <button data-action="new-movement" data-kind="in"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg> Yeni giriş fişi</button>
-        <button data-action="new-movement" data-kind="out"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg> Yeni sevkiyat fişi</button>
+        <button data-action="new-movement" data-kind="out"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg> Yeni çıkış fişi</button>
         <button data-action="new-material"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Yeni malzeme kartı</button>
         <div class="sep"></div>
         <button data-action="settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg> Ayarlar ve bildirimler</button>
@@ -65,7 +65,7 @@
         <input type="search" id="search" placeholder="Malzeme, kod, kategori ara" aria-label="Malzeme ara">
         <div class="btn-row">
           <button class="btn primary" data-action="new-movement" data-kind="in"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Giriş</button>
-          <button class="btn out-btn" data-action="new-movement" data-kind="out"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Sevkiyat</button>
+          <button class="btn out-btn" data-action="new-movement" data-kind="out"><svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Çıkış</button>
         </div>
       </div>
       <div class="chips" id="stateChips"></div>
@@ -86,7 +86,7 @@
   <div class="ntoast" id="ntoast" role="status" hidden></div>
   <div class="lightbox" id="lightbox" hidden></div>
 </div>
-<script src="/app.js?v=20261021"></script>
+<script src="/app.js?v=20261022"></script>
 <script src="/pwa.js?v=20261021"></script>
 </body>
 </html>

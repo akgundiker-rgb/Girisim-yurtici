@@ -1,11 +1,11 @@
 # Malzeme Takip — fabrika stok takibi
 
-Peak PV Solar için fabrika deposundaki malzemelerin **giriş ve sevkiyatını canlı** izleyen, kendi sunucunuzda çalışan web uygulaması. International Desk ile aynı tasarım ve aynı altyapı (Node.js + SQLite, kendi giriş sistemi, kendi veritabanı).
+Peak PV Solar için fabrika deposundaki malzemelerin **giriş ve çıkışını canlı** izleyen, kendi sunucunuzda çalışan web uygulaması. International Desk ile aynı tasarım ve aynı altyapı (Node.js + SQLite, kendi giriş sistemi, kendi veritabanı).
 
 **Neler yapar**
 
 - **Malzeme kartları** — kod, ad, birim, kategori, konum (depo/raf), açıklama ve elle belirlenen **minimum stok limiti**.
-- **Giriş / sevkiyat / düzeltme fişleri** — her belge numaralandırılır (`GRS-2026-00001`, `SVK-2026-00001`, `DZL-2026-00001`), bir veya daha fazla malzeme satırı taşır ve **kimin talimat / sipariş verdiğini**, kimin kaydettiğini, tedarikçi veya teslimat yerini, irsaliye numarasını ve araç plakasını tutar. Satırlar kaydedildikten sonra değiştirilemez; hatalı belge yönetici tarafından iptal edilir (stok etkisi geri alınır, PDF'e "İPTAL" damgası basılır).
+- **Giriş / çıkış / düzeltme fişleri** — her belge numaralandırılır (`GRS-2026-00001`, `SVK-2026-00001`, `DZL-2026-00001`), bir veya daha fazla malzeme satırı taşır ve **kimin talimat / sipariş verdiğini**, kimin kaydettiğini, tedarikçi veya teslimat yerini, irsaliye numarasını ve araç plakasını tutar. Satırlar kaydedildikten sonra değiştirilemez; hatalı belge yönetici tarafından iptal edilir (stok etkisi geri alınır, PDF'e "İPTAL" damgası basılır).
 - **Canlı stok** — açık olan bütün ekranlar WebSocket ile anında güncellenir; stok her zaman belgelerden hesaplanır.
 - **Alarm** — stok, kartındaki limitin altına düşünce alarm açılır: uygulamada kırmızı şerit ve zil, telefona anlık bildirim (VAPID anahtarları girilmişse) ve e-posta (SMTP girilmişse; ekip üyeleri ve ek alıcılar). Stok limitin üstüne çıkınca alarm kendiliğinden kapanır.
 - **PDF fişi** — her belge için A4 PDF (Peak PV Solar başlığı, satırlar, önceki/kalan stok, imza kutuları); istenildiği an açılır veya indirilir.

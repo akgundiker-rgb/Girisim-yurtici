@@ -2,7 +2,7 @@
   "id": "/?app=peakpv",
   "name": "Malzeme Takip",
   "short_name": "Malzeme Takip",
-  "description": "Peak PV Solar — fabrika malzeme giriş / sevkiyat takibi, canlı stok ve alarmlar.",
+  "description": "Peak PV Solar — fabrika malzeme giriş / çıkış takibi, canlı stok ve alarmlar.",
   "lang": "tr",
   "start_url": "/",
   "scope": "/",
