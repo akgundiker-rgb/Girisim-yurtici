@@ -567,7 +567,7 @@ table.team td.acts{white-space:nowrap;text-align:right}
 /* Durum renk kodu: normal yeşil · limite yaklaşıyor amber · limitin altında kırmızı · limit yok gri · pasif çizgili */
 .g-ok{--g:var(--ok)} .g-near{--g:var(--warn)} .g-low{--g:var(--bad)} .g-none{--g:var(--line-strong)} .g-off{--g:var(--muted)}
 .pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.near{background:var(--warn-soft);color:var(--warn)} .pill.low{background:var(--bad-soft);color:var(--bad)} .pill.none{background:var(--muted-soft);color:var(--muted)} .pill.off{background:var(--muted-soft);color:var(--muted)}
-.pill.in{background:var(--ok-soft);color:var(--ok)} .pill.out{background:var(--info-soft);color:var(--info)} .pill.adj{background:var(--violet-soft);color:var(--violet)} .pill.cancel{background:var(--bad-soft);color:var(--bad)}
+.pill.in{background:var(--ok-soft);color:var(--ok)} .pill.out{background:var(--info-soft);color:var(--info)} .pill.ret{background:var(--teal-soft);color:var(--teal)} .pill.adj{background:var(--violet-soft);color:var(--violet)} .pill.cancel{background:var(--bad-soft);color:var(--bad)} .pill.info{background:var(--info-soft);color:var(--info)}
 .rail .nav-row .prow.on{background:var(--chrome-4);border-color:var(--chrome-4)}
 .rail .prow .pname .nbadge{margin-left:auto;font-size:11px;background:var(--chrome-bad);color:#1b0b09;border-radius:999px;padding:0 7px;font-weight:700;line-height:18px}
 .rail .plist .prow .pstock{grid-row:2;grid-column:2;font-size:12px;color:var(--chrome-muted);font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap;align-self:end;padding-top:2px}
@@ -614,7 +614,7 @@ table.stock tr.cancelled td{opacity:.55} table.stock tr.cancelled .t{text-decora
 .seg button{border:0;background:none;padding:6px 12px;font-weight:500;color:var(--muted);border-right:1px solid var(--line);display:inline-flex;gap:6px;align-items:center}
 .seg button:last-child{border-right:0} .seg button:hover{background:var(--surface-2);color:var(--fg)}
 .seg button.on{background:var(--accent-soft);color:var(--accent)}
-.seg button.on.kin{background:var(--ok-soft);color:var(--ok)} .seg button.on.kout{background:var(--info-soft);color:var(--info)} .seg button.on.kadj{background:var(--violet-soft);color:var(--violet)}
+.seg button.on.kin{background:var(--ok-soft);color:var(--ok)} .seg button.on.kout{background:var(--info-soft);color:var(--info)} .seg button.on.kret{background:var(--teal-soft);color:var(--teal)} .seg button.on.kadj{background:var(--violet-soft);color:var(--violet)}
 .pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:10px 12px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 
 /* Hareket satırları (genel bakış ve malzeme kartı) */
@@ -623,11 +623,11 @@ table.stock tr.cancelled td{opacity:.55} table.stock tr.cancelled .t{text-decora
 .mvrow:hover .mt{color:var(--accent)}
 .mvrow .kico{width:30px;height:30px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;flex:none;grid-row:1/3}
 .mvrow .kico svg.i{width:16px;height:16px}
-.mvrow .kico.in{background:var(--ok-soft);color:var(--ok)} .mvrow .kico.out{background:var(--info-soft);color:var(--info)} .mvrow .kico.adj{background:var(--violet-soft);color:var(--violet)} .mvrow .kico.cancel{background:var(--bad-soft);color:var(--bad)}
+.mvrow .kico.in{background:var(--ok-soft);color:var(--ok)} .mvrow .kico.out{background:var(--info-soft);color:var(--info)} .mvrow .kico.ret{background:var(--teal-soft);color:var(--teal)} .mvrow .kico.adj{background:var(--violet-soft);color:var(--violet)} .mvrow .kico.cancel{background:var(--bad-soft);color:var(--bad)}
 .mvrow .mt{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;grid-column:2}
 .mvrow .ms{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;grid-column:2}
 .mvrow .mq{grid-column:3;grid-row:1;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;text-align:right}
-.mvrow .mq.in{color:var(--ok)} .mvrow .mq.out{color:var(--info)} .mvrow .mq.adj{color:var(--violet)}
+.mvrow .mq.in{color:var(--ok)} .mvrow .mq.out{color:var(--info)} .mvrow .mq.ret{color:var(--teal)} .mvrow .mq.adj{color:var(--violet)}
 .mvrow .md{grid-column:3;grid-row:2;font-size:12px;color:var(--muted);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .mvrow.cancelled .mt{text-decoration:line-through;text-decoration-thickness:1px;color:var(--muted)}
 
@@ -673,6 +673,7 @@ table.stock tr.cancelled td{opacity:.55} table.stock tr.cancelled .t{text-decora
 .kind-seg button.on.kin{border-color:var(--ok);background:var(--ok-soft)} .kind-seg button.on.kin strong{color:var(--ok)}
 .kind-seg button.on.kout{border-color:var(--info);background:var(--info-soft)} .kind-seg button.on.kout strong{color:var(--info)}
 .kind-seg button.on.kadj{border-color:var(--violet);background:var(--violet-soft)} .kind-seg button.on.kadj strong{color:var(--violet)}
+.kind-seg button.on.kret{border-color:var(--teal);background:var(--teal-soft)} .kind-seg button.on.kret strong{color:var(--teal)}
 .preview-warn{background:var(--warn-soft);color:var(--warn);padding:8px 12px;border-radius:8px;font-size:13px;margin-top:10px;display:flex;gap:8px;align-items:flex-start}
 .preview-warn.bad{background:var(--bad-soft);color:var(--bad)}
 .preview-warn svg.i{flex:none;margin-top:1px}
@@ -875,3 +876,15 @@ body.lb-open{overflow:hidden}
   .msgs{padding:10px 12px}
   .mgroup{grid-template-columns:30px minmax(0,1fr);gap:0 10px}
 }
+
+/* ---------- Gelmekte olan siparişler ---------- */
+.g-info{--g:var(--info)}
+.rail .prow .pname .nbadge.ord{background:var(--chrome-accent);color:#07202a} .rail .prow .pname .nbadge.ord.late{background:var(--chrome-bad);color:#1b0b09}
+.tile.orders .l::before{background:var(--teal)} .tile.orders{background:var(--tint-stone);border-color:var(--edge-stone)} .tile.orders .v{color:var(--ink-sky)}
+.tile.orders.late{background:var(--tint-sand);border-color:var(--edge-sand)} .tile.orders.late .v{color:var(--warn)}
+.rail .rail-head .btn-row{flex-wrap:wrap} .rail .rail-head .btn-row .btn{flex:1 1 30%;padding:8px 6px;font-size:13px}
+.rail .rail-head .btn-row .btn svg.i{width:14px;height:14px}
+.kind-seg{flex-wrap:wrap} .kind-seg button{flex:1 1 45%}
+table.stock td.date.low{color:var(--bad)}
+@media (max-width: 900px){ .kind-seg button{flex:1 1 100%} }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){ .tile.orders{background:var(--glass-tint)} .tile.orders.late{background:color-mix(in srgb,var(--warn-soft) 70%,transparent)} }

@@ -301,31 +301,24 @@ function withAlert(m) { if (!m) return m; return { ...m, open_alert: (repo.openA
 // ---------- hareketler (giriş / sevkiyat / düzeltme belgeleri) ----------
 app.get('/api/movements', auth, (req, res) => {
   const q = req.query;
-  const kind = ['in', 'out', 'adj'].includes(q.kind) ? q.kind : '';
+  const kind = ['in', 'out', 'adj', 'ret'].includes(q.kind) ? q.kind : '';
   const limit = Math.min(200, Math.max(1, Number(q.limit) || 50)); const offset = Math.max(0, Number(q.offset) || 0);
   const r = repo.listMovements({ kind, from: validDate(q.from) ? q.from : '', to: validDate(q.to) ? q.to : '', materialId: str(q.material, 60), q: str(q.q, 80), limit, offset, includeCancelled: q.cancelled === '1' });
   res.json({ movements: r.rows, total: r.total, limit, offset });
 });
-app.get('/api/movements/suggest', auth, (req, res) => res.json({ orderedBy: repo.orderedByNames(), suppliers: repo.counterparties('in'), destinations: repo.counterparties('out'), team: repo.activeUsers().map(u => u.name) }));
+app.get('/api/movements/suggest', auth, (req, res) => res.json({ orderedBy: repo.orderedByNames(), suppliers: [...new Set([...repo.counterparties('in'), ...repo.suppliers()])], destinations: repo.counterparties('out'), returners: repo.counterparties('ret'), team: repo.activeUsers().map(u => u.name) }));
 app.get('/api/movements/:id', auth, (req, res) => { const mv = repo.movementRow(req.params.id); if (!mv) return fail(res, 404, 'not_found', 'Belge bulunamadı.'); res.json({ movement: mv }); });
 app.post('/api/movements', auth, writer, (req, res) => {
   const b = req.body || {};
-  const kind = ['in', 'out', 'adj'].includes(b.kind) ? b.kind : null; if (!kind) return fail(res, 400, 'bad_request', 'Belge türü giriş, çıkış veya düzeltme olmalıdır.');
+  const kind = ['in', 'out', 'adj', 'ret'].includes(b.kind) ? b.kind : null; if (!kind) return fail(res, 400, 'bad_request', 'Belge türü giriş, çıkış, geri dönen veya düzeltme olmalıdır.');
   const doc_date = validDate(b.doc_date) ? b.doc_date : todayIso();
   const h = { kind, doc_date, ordered_by: str(b.ordered_by, 120), counterparty: str(b.counterparty, 160), reference: str(b.reference, 80), vehicle: str(b.vehicle, 40).toUpperCase(), notes: str(b.notes, 2000) };
   if (!h.ordered_by) return fail(res, 400, 'bad_request', 'Talimatı / siparişi veren kişi belirtilmelidir.');
   const rawLines = Array.isArray(b.lines) ? b.lines : [];
   if (!rawLines.length) return fail(res, 400, 'bad_request', 'En az bir malzeme satırı ekleyin.');
   if (rawLines.length > 200) return fail(res, 400, 'bad_request', 'Bir belgede en fazla 200 satır olabilir.');
-  const lines = [];
-  for (const l of rawLines) {
-    const m = repo.materialRow(str(l && l.material_id, 60)); if (!m) return fail(res, 400, 'bad_request', 'Satırlardan birinde geçersiz malzeme var.');
-    if (m.deleted_at) return fail(res, 400, 'bad_request', `"${m.name}" kartı silinmiş; hareket girilemez.`);
-    if (!m.active) return fail(res, 400, 'bad_request', `"${m.name}" pasif durumda; hareket girilemez.`);
-    const q = num(l.qty);
-    if (Number.isNaN(q) || q === 0 || (kind !== 'adj' && q < 0)) return fail(res, 400, 'bad_request', `"${m.name}" için miktar ${kind === 'adj' ? 'sıfırdan farklı (artı veya eksi) ' : 'pozitif '}bir sayı olmalıdır.`);
-    lines.push({ material_id: m.id, qty: q, note: str(l.note, 200) });
-  }
+  const parsed = parseLines(rawLines, kind); if (parsed.error) return fail(res, 400, 'bad_request', parsed.error);
+  const lines = parsed.lines;
   let mv;
   try { mv = repo.createMovement(h, lines, req.user.id, !!settings().allowNegative); }
   catch (e) { if (e.code === 'insufficient_stock') return fail(res, 409, 'insufficient_stock', e.message); console.error(e); return fail(res, 500, 'server_error', 'Belge kaydedilemedi: ' + e.message); }
@@ -335,6 +328,18 @@ app.post('/api/movements', auth, writer, (req, res) => {
   evaluateAlerts([...new Set(mv.lines.map(l => l.material_id))], mv, req.user);
   res.json({ movement: mv });
 });
+function parseLines(rawLines, kind) {
+  const lines = [];
+  for (const l of rawLines) {
+    const m = repo.materialRow(str(l && l.material_id, 60)); if (!m) return { error: 'Satırlardan birinde geçersiz malzeme var.' };
+    if (m.deleted_at) return { error: `"${m.name}" kartı silinmiş; hareket girilemez.` };
+    if (!m.active) return { error: `"${m.name}" pasif durumda; hareket girilemez.` };
+    const q = num(l.qty);
+    if (Number.isNaN(q) || q === 0 || (kind !== 'adj' && q < 0)) return { error: `"${m.name}" için miktar ${kind === 'adj' ? 'sıfırdan farklı (artı veya eksi) ' : 'pozitif '}bir sayı olmalıdır.` };
+    lines.push({ material_id: m.id, qty: q, note: str(l.note, 200), line_id: str(l.line_id, 40) || null, id: str(l.id, 40) || null });
+  }
+  return { lines };
+}
 app.patch('/api/movements/:id', auth, writer, (req, res) => {
   const cur = repo.movementRow(req.params.id); if (!cur) return fail(res, 404, 'not_found', 'Belge bulunamadı.');
   if (cur.cancelled) return fail(res, 409, 'cancelled', 'İptal edilmiş bir belge düzenlenemez.');
@@ -355,6 +360,7 @@ app.post('/api/movements/:id/cancel', auth, admin, (req, res) => {
   const mv = repo.cancelMovement(cur.id, req.user.id, str((req.body || {}).reason, 300));
   activity({ kind: 'movement', userId: req.user.id, title: `${mv.doc_no} iptal edildi`, text: mv.cancel_reason || 'Stok etkisi geri alındı.', ref: { movementId: mv.id } });
   broadcast({ t: 'movement', movement: mv });
+  if (mv.order_id) broadcast({ t: 'order', order: repo.orderRow(mv.order_id) });
   for (const id of new Set(mv.lines.map(l => l.material_id))) broadcast({ t: 'material', material: withAlert(repo.materialRow(id)) });
   evaluateAlerts([...new Set(mv.lines.map(l => l.material_id))], mv, req.user);
   res.json({ movement: mv });
@@ -385,7 +391,7 @@ app.get('/api/export/stock.csv', (req, res) => {
 });
 app.get('/api/export/movements.csv', (req, res) => {
   const u = repo.userBySession(parseCookies(req.headers.cookie)[COOKIE]); if (!u) return res.status(401).type('text').send('Giriş yapın.');
-  const q = req.query; const kind = ['in', 'out', 'adj'].includes(q.kind) ? q.kind : '';
+  const q = req.query; const kind = ['in', 'out', 'adj', 'ret'].includes(q.kind) ? q.kind : '';
   const list = repo.listMovements({ kind, from: validDate(q.from) ? q.from : '', to: validDate(q.to) ? q.to : '', materialId: str(q.material, 60), q: str(q.q, 80), limit: 5000, offset: 0, includeCancelled: q.cancelled === '1' }).rows;
   const rows = [];
   for (const r of list) { const mv = repo.movementRow(r.id); for (const l of mv.lines) rows.push([mv.doc_no, kindName(mv.kind), mv.doc_date, l.material_code, l.material_name, l.unit, csvNum(l.qty), csvNum(l.stock_before), csvNum(l.stock_after), mv.ordered_by, mv.counterparty, mv.reference, mv.vehicle, mv.created_by_name, mv.cancelled ? 'İPTAL' : '', l.note || mv.notes]); }
@@ -436,6 +442,75 @@ async function notifyAlert(a, m, mv, s) {
   }
   repo.setAlertNotified(a.id, info);
 }
+
+// ---------- gelmekte olan siparişler ----------
+// Beklenen teslimatlar stoğa etki etmez; "Stoğa ekle" düğmesiyle (kısmen veya tamamen) teslim alındığında bir giriş fişi oluşur.
+app.get('/api/orders', auth, (req, res) => {
+  const q = req.query; const status = q.status === undefined ? 'active' : (['active', 'open', 'partial', 'done', 'cancelled'].includes(q.status) ? q.status : '');
+  const limit = Math.min(200, Math.max(1, Number(q.limit) || 50)); const offset = Math.max(0, Number(q.offset) || 0);
+  const r = repo.listOrders({ status, q: str(q.q, 80), limit, offset });
+  res.json({ orders: r.rows, total: r.total, limit, offset, stats: repo.orderStats(todayIso()) });
+});
+app.get('/api/orders/:id', auth, (req, res) => { const o = repo.orderRow(req.params.id); if (!o) return fail(res, 404, 'not_found', 'Sipariş bulunamadı.'); res.json({ order: o }); });
+function cleanOrderHeader(b) {
+  const h = { order_no: str(b.order_no, 80), supplier: str(b.supplier, 160), ordered_by: str(b.ordered_by, 120), notes: str(b.notes, 2000), expected_date: b.expected_date ? (validDate(b.expected_date) ? b.expected_date : 'bad') : '' };
+  if (h.expected_date === 'bad') return { error: 'Beklenen tarih geçersiz.' };
+  if (!h.order_no) return { error: 'Sipariş / teslimat numarası gerekir.' };
+  return { h };
+}
+app.post('/api/orders', auth, writer, (req, res) => {
+  const b = req.body || {}; const c = cleanOrderHeader(b); if (c.error) return fail(res, 400, 'bad_request', c.error);
+  const raw = Array.isArray(b.lines) ? b.lines : []; if (!raw.length) return fail(res, 400, 'bad_request', 'En az bir malzeme satırı ekleyin.'); if (raw.length > 200) return fail(res, 400, 'bad_request', 'En fazla 200 satır.');
+  const p = parseLines(raw, 'in'); if (p.error) return fail(res, 400, 'bad_request', p.error);
+  const o = repo.createOrder(c.h, p.lines, req.user.id);
+  activity({ kind: 'order', userId: req.user.id, title: `Gelmekte olan sipariş: ${o.order_no}`, text: `${o.lines.length} kalem${o.supplier ? ' · ' + o.supplier : ''}${o.expected_date ? ' · beklenen ' + o.expected_date.split('-').reverse().join('.') : ''}`, ref: { orderId: o.id } });
+  broadcast({ t: 'order', order: o });
+  res.json({ order: o });
+});
+app.patch('/api/orders/:id', auth, writer, (req, res) => {
+  const cur = repo.orderRow(req.params.id); if (!cur) return fail(res, 404, 'not_found', 'Sipariş bulunamadı.');
+  if (cur.status === 'cancelled' || cur.status === 'done') return fail(res, 409, 'closed', 'Tamamlanmış veya iptal edilmiş sipariş düzenlenemez.');
+  if (cur.created_by !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'forbidden', 'Siparişi yalnızca kaydeden kişi veya bir yönetici düzenleyebilir.');
+  const b = req.body || {}; const c = cleanOrderHeader({ ...cur, ...b }); if (c.error) return fail(res, 400, 'bad_request', c.error);
+  let lines = null;
+  if (Array.isArray(b.lines)) { if (!b.lines.length) return fail(res, 400, 'bad_request', 'En az bir malzeme satırı kalmalı.'); const p = parseLines(b.lines, 'in'); if (p.error) return fail(res, 400, 'bad_request', p.error); lines = p.lines; }
+  const o = repo.updateOrder(cur.id, c.h, lines);
+  activity({ kind: 'order', userId: req.user.id, title: `${o.order_no} siparişi güncellendi`, text: '', ref: { orderId: o.id } });
+  broadcast({ t: 'order', order: o }); res.json({ order: o });
+});
+app.post('/api/orders/:id/receive', auth, writer, (req, res) => {
+  const o = repo.orderRow(req.params.id); if (!o) return fail(res, 404, 'not_found', 'Sipariş bulunamadı.');
+  if (o.status === 'cancelled') return fail(res, 409, 'cancelled', 'İptal edilmiş sipariş teslim alınamaz.');
+  const b = req.body || {};
+  const raw = (Array.isArray(b.lines) ? b.lines : []).filter(l => l && num(l.qty) > 0);
+  if (!raw.length) return fail(res, 400, 'bad_request', 'Teslim alınan en az bir satıra miktar girin.');
+  const byLine = new Map(o.lines.map(l => [l.id, l]));
+  for (const l of raw) { const ol = byLine.get(str(l.line_id, 40)); if (!ol) return fail(res, 400, 'bad_request', 'Satırlardan biri bu siparişe ait değil.'); l.material_id = ol.material_id; }
+  const p = parseLines(raw, 'in'); if (p.error) return fail(res, 400, 'bad_request', p.error);
+  const h = { doc_date: validDate(b.doc_date) ? b.doc_date : todayIso(), ordered_by: str(b.ordered_by, 120) || o.ordered_by || req.user.name, counterparty: str(b.counterparty, 160) || o.supplier, reference: str(b.reference, 80) || o.order_no, vehicle: str(b.vehicle, 40).toUpperCase(), notes: str(b.notes, 2000) };
+  let mv;
+  try { mv = repo.receiveOrder(o.id, h, p.lines, req.user.id); } catch (e) { console.error(e); return fail(res, 500, 'server_error', 'Teslim alma kaydedilemedi: ' + e.message); }
+  const after = repo.orderRow(o.id);
+  activity({ kind: 'order', userId: req.user.id, title: `${o.order_no} siparişinden stoğa eklendi: ${mv.doc_no}`, text: `${mv.lines.length} kalem${after.status === 'done' ? ' · sipariş tamamlandı' : ' · kısmi teslimat'}`, ref: { orderId: o.id, movementId: mv.id } });
+  broadcast({ t: 'movement', movement: mv }); broadcast({ t: 'order', order: after });
+  for (const id of new Set(mv.lines.map(l => l.material_id))) broadcast({ t: 'material', material: withAlert(repo.materialRow(id)) });
+  evaluateAlerts([...new Set(mv.lines.map(l => l.material_id))], mv, req.user);
+  res.json({ movement: mv, order: after });
+});
+app.post('/api/orders/:id/cancel', auth, writer, (req, res) => {
+  const o = repo.orderRow(req.params.id); if (!o) return fail(res, 404, 'not_found', 'Sipariş bulunamadı.');
+  if (o.created_by !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'forbidden', 'Siparişi yalnızca kaydeden kişi veya bir yönetici iptal edebilir.');
+  const r = repo.cancelOrder(o.id, req.user.id, str((req.body || {}).reason, 300));
+  activity({ kind: 'order', userId: req.user.id, title: `${o.order_no} siparişi iptal edildi`, text: r.cancel_reason || '', ref: { orderId: o.id } });
+  broadcast({ t: 'order', order: r }); res.json({ order: r });
+});
+app.post('/api/orders/:id/reopen', auth, writer, (req, res) => {
+  const o = repo.orderRow(req.params.id); if (!o) return fail(res, 404, 'not_found', 'Sipariş bulunamadı.');
+  if (o.created_by !== req.user.id && req.user.role !== 'admin') return fail(res, 403, 'forbidden', 'Yetkiniz yok.');
+  const r = repo.reopenOrder(o.id);
+  activity({ kind: 'order', userId: req.user.id, title: `${o.order_no} siparişi yeniden açıldı`, text: '', ref: { orderId: o.id } });
+  broadcast({ t: 'order', order: r }); res.json({ order: r });
+});
 
 // ---------- sohbet ----------
 const CH_NAME = /^[a-z0-9çğıöşü][a-z0-9çğıöşü_-]{0,31}$/;
@@ -549,7 +624,7 @@ app.get('/api/dashboard', auth, (req, res) => {
   res.json({
     today, materials: materials.length, low: low.length, near: near.length, noLimit: materials.filter(m => !(m.min_stock > 0)).length,
     todayIn: pick(todayCounts, 'in').n, todayOut: pick(todayCounts, 'out').n, weekIn: pick(weekCounts, 'in').n, weekOut: pick(weekCounts, 'out').n,
-    recent: repo.listMovements({ limit: 12, offset: 0 }).rows, alerts: repo.listAlerts({ open: true, limit: 50 }),
+    recent: repo.listMovements({ limit: 12, offset: 0 }).rows, alerts: repo.listAlerts({ open: true, limit: 50 }), orders: repo.orderStats(today),
     lowList: low.sort((a, b) => (a.stock / a.min_stock) - (b.stock / b.min_stock)).slice(0, 20), nearList: near.slice(0, 10),
   });
 });
@@ -559,7 +634,7 @@ app.get('/api/activity', auth, (req, res) => res.json({ items: repo.listActivity
 app.post('/api/activity/seen', auth, (req, res) => { const ts = Number((req.body || {}).ts) || Date.now(); repo.setInboxSeen(req.user.id, ts); res.json({ ok: true, seen: ts }); });
 function activity(a) { const row = repo.addActivity(a); const to = a.ref && a.ref.forUser; const msg = JSON.stringify({ t: 'activity', item: row }); for (const c of clients) if ((!to || c.user.id === to) && c.ws.readyState === 1) c.ws.send(msg); return row; }
 
-const kindName = (k) => k === 'in' ? 'Giriş' : k === 'out' ? 'Çıkış' : 'Düzeltme';
+const kindName = (k) => k === 'in' ? 'Giriş' : k === 'out' ? 'Çıkış' : k === 'ret' ? 'Geri dönen' : 'Düzeltme';
 const roleName = (r) => r === 'admin' ? 'yönetici' : r === 'viewer' ? 'görüntüleyici' : 'kullanıcı';
 
 // ---------- statik dosyalar ve sayfalar ----------

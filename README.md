@@ -6,6 +6,8 @@ Peak PV Solar için fabrika deposundaki malzemelerin **giriş ve çıkışını 
 
 - **Malzeme kartları** — kod, ad, birim, kategori, konum (depo/raf), açıklama ve elle belirlenen **minimum stok limiti**.
 - **Giriş / çıkış / düzeltme fişleri** — her belge numaralandırılır (`GRS-2026-00001`, `SVK-2026-00001`, `DZL-2026-00001`), bir veya daha fazla malzeme satırı taşır ve **kimin talimat / sipariş verdiğini**, kimin kaydettiğini, tedarikçi veya teslimat yerini, irsaliye numarasını ve araç plakasını tutar. Satırlar kaydedildikten sonra değiştirilemez; hatalı belge yönetici tarafından iptal edilir (stok etkisi geri alınır, PDF'e "İPTAL" damgası basılır).
+- **Geri dönen** — şantiyeden / üretimden depoya dönen malzeme için ayrı belge türü (`GDN-2026-00001`); stoğu artırır, nereden döndüğü ve iade eden kaydedilir.
+- **Gelmekte olan siparişler** — tedarikçiye verilen sipariş, sipariş / teslimat numarası, beklenen tarih ve kalemleriyle kaydedilir; **stoğa etki etmez**. Mal geldiğinde **Stoğa ekle** düğmesiyle gelen miktarlar yazılır, o anda giriş fişi (GRS) oluşur ve stok artar. Kısmi teslimat desteklenir (Bekliyor → Kısmen geldi → Tamamlandı); gecikmiş siparişler işaretlenir; bir giriş fişi iptal edilirse miktar siparişe geri döner.
 - **Canlı stok** — açık olan bütün ekranlar WebSocket ile anında güncellenir; stok her zaman belgelerden hesaplanır.
 - **Alarm** — stok, kartındaki limitin altına düşünce alarm açılır: uygulamada kırmızı şerit ve zil, telefona anlık bildirim (VAPID anahtarları girilmişse) ve e-posta (SMTP girilmişse; ekip üyeleri ve ek alıcılar). Stok limitin üstüne çıkınca alarm kendiliğinden kapanır.
 - **PDF fişi** — her belge için A4 PDF (Peak PV Solar başlığı, satırlar, önceki/kalan stok, imza kutuları); istenildiği an açılır veya indirilir.

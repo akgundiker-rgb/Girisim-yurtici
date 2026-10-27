@@ -12,13 +12,16 @@
   const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const dayOf = (ts) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts));
   function ago(ts) { const s = Math.max(0, (Date.now() - ts) / 1000); if (s < 60) return 'az önce'; if (s < 3600) return Math.floor(s / 60) + ' dk önce'; if (s < 86400) return Math.floor(s / 3600) + ' sa önce'; if (s < 7 * 86400) return Math.floor(s / 86400) + ' gün önce'; return fmtDT(ts); }
-  const KIND = { in: 'Giriş', out: 'Çıkış', adj: 'Düzeltme' };
-  const KIND_LONG = { in: 'Malzeme giriş fişi', out: 'Malzeme çıkış fişi', adj: 'Stok düzeltme fişi' };
+  const KIND = { in: 'Giriş', out: 'Çıkış', ret: 'Geri dönen', adj: 'Düzeltme' };
+  const KIND_LONG = { in: 'Malzeme giriş fişi', out: 'Malzeme çıkış fişi', ret: 'Geri dönen malzeme fişi', adj: 'Stok düzeltme fişi' };
+  const OSTATUS = { open: ['near', 'Bekliyor'], partial: ['info', 'Kısmen geldi'], done: ['ok', 'Tamamlandı'], cancelled: ['cancel', 'İptal'] };
   const ROLE = { admin: 'Yönetici', member: 'Kullanıcı', viewer: 'Görüntüleyici' };
   const ICON = {
     in: '<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
     out: '<svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
     adj: '<svg class="i" viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="9"/></svg>',
+    ret: '<svg class="i" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4M5 10h9a5 5 0 010 10h-3"/></svg>',
+    order: '<svg class="i" viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7zM7 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM17 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/></svg>',
     cancel: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 8l8 8M16 8l-8 8"/></svg>',
     alert: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3l9 16H3zM12 10v4M12 17.5v.5"/></svg>',
     ok: '<svg class="i" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></svg>',
@@ -58,6 +61,7 @@
     activity: [], inboxSeen: 0, unread: 0, inboxOpen: false,
     railOpen: false,
     chat: { channels: [], cid: null, msgs: [], hasMore: false, loaded: false, typing: {}, pending: [], filter: '', unread: 0, drafts: {}, mention: null },
+    orders: { status: 'active', q: '', rows: [], total: 0, stats: { active: 0, overdue: 0, next: [] } },
     lb: null,
   };
   const canWrite = () => S.me.role === 'admin' || S.me.role === 'member';
@@ -91,6 +95,7 @@
     renderMe(); renderChips(); renderRail(); renderAlarmBar(); renderInboxCount(); renderChatCount();
     route(); connect();
     loadChannels().catch(() => {});
+    loadOrderStats();
     try { const a = await api('GET', '/api/activity?limit=150'); S.activity = a.items; renderInboxCount(); } catch (e) {}
   }
   async function loadMaterials() {
@@ -111,6 +116,8 @@
     else if (p === 'alarmlar') { S.view = 'alerts'; refreshAlerts(); }
     else if (p === 'belge' && id) { openMovement(id); return; }
     else if (p === 'sohbet') { S.view = 'chat'; if (id) S.chat.cid = id; openChat(); }
+    else if (p === 'siparisler') { S.view = 'orders'; loadOrders(); }
+    else if (p === 'siparis' && id) { openOrder(id); return; }
     else { S.view = 'dashboard'; loadDashboard(); }
     $('pane').classList.toggle('chat-pane', S.view === 'chat');
     if (S.view !== 'chat') stopTypingTicker();
@@ -155,6 +162,7 @@
       renderInboxCount(); if (S.inboxOpen) renderInbox();
     } else if (m.t === 'team') { api('GET', '/api/me').then(r => { S.team = r.team; S.me = r.me; renderMe(); }).catch(() => {}); }
     else if (m.t === 'settings') { S.settings = { ...S.settings, ...m.settings }; }
+    else if (m.t === 'order') { if (S.view === 'orders') loadOrders(); else loadOrderStats(); if (S.view === 'dashboard') loadDashboard(); const dlg = document.querySelector('[data-order-id="' + m.order.id + '"]'); if (dlg) showOrder(m.order); }
     else if (m.t === 'chat') onChatMessage(m.message);
     else if (m.t === 'chat-edit') { const i = S.chat.msgs.findIndex(x => x.id === m.message.id); if (i >= 0) { S.chat.msgs[i] = m.message; renderMessages(); } }
     else if (m.t === 'chat-del') { const n = S.chat.msgs.length; S.chat.msgs = S.chat.msgs.filter(x => x.id !== m.id); if (S.chat.msgs.length !== n) renderMessages(); }
@@ -215,9 +223,9 @@
     });
   }
   function renderRail() {
-    const nav = [['dashboard', '#/', 'Genel bakış', '<svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>'], ['materials', '#/malzemeler', 'Malzemeler ve stok', ICON.box], ['movements', '#/hareketler', 'Hareketler', '<svg class="i" viewBox="0 0 24 24"><path d="M4 9h12l-3-3M20 15H8l3 3"/></svg>'], ['alerts', '#/alarmlar', 'Alarmlar', ICON.alert], ['chat', '#/sohbet', 'Sohbet', ICON.chat]];
+    const nav = [['dashboard', '#/', 'Genel bakış', '<svg class="i" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg>'], ['materials', '#/malzemeler', 'Malzemeler ve stok', ICON.box], ['movements', '#/hareketler', 'Hareketler', '<svg class="i" viewBox="0 0 24 24"><path d="M4 9h12l-3-3M20 15H8l3 3"/></svg>'], ['alerts', '#/alarmlar', 'Alarmlar', ICON.alert], ['orders', '#/siparisler', 'Gelmekte olan siparişler', ICON.order], ['chat', '#/sohbet', 'Sohbet', ICON.chat]];
     const list = filteredMaterials();
-    let h = `<div class="home-row nav-row">${nav.map(([v, href, l, ic]) => `<button class="prow ${S.view === v ? 'on' : ''}" data-action="go" data-href="${href}"><span class="pname">${ic}${l}${v === 'alerts' && S.alerts.open.length ? `<span class="nbadge">${S.alerts.open.length}</span>` : ''}${v === 'chat' && S.chat.unread ? `<span class="nbadge chat">${S.chat.unread}</span>` : ''}</span></button>`).join('')}</div>`;
+    let h = `<div class="home-row nav-row">${nav.map(([v, href, l, ic]) => `<button class="prow ${S.view === v ? 'on' : ''}" data-action="go" data-href="${href}"><span class="pname">${ic}${l}${v === 'alerts' && S.alerts.open.length ? `<span class="nbadge">${S.alerts.open.length}</span>` : ''}${v === 'chat' && S.chat.unread ? `<span class="nbadge chat">${S.chat.unread}</span>` : ''}${v === 'orders' && S.orders.stats.active ? `<span class="nbadge ord ${S.orders.stats.overdue ? 'late' : ''}">${S.orders.stats.active}</span>` : ''}</span></button>`).join('')}</div>`;
     h += `<div class="rail-section"><span>Malzemeler</span><span class="mono">${list.length}</span></div>`;
     if (!list.length) h += `<p class="muted small" style="padding:6px 10px">${S.materials.length ? 'Bu filtreye uyan malzeme yok.' : 'Henüz malzeme kartı yok.'}</p>`;
     else h += `<div class="plist">${list.map(m => { const s = stateOf(m); return `<button class="prow ${S.view === 'material' && S.matId === m.id ? 'on' : ''} ${!m.active ? 'off' : ''}" data-action="go" data-href="#/malzeme/${m.id}"><span class="pbar g-${s}" style="background:var(--g)"></span><span class="pname"><span class="ptext">${esc(m.name)}</span></span><span class="pmeta">${esc(m.code)}${m.category ? ' · ' + esc(m.category) : ''}</span><span class="pstock ${s}">${fmtNum(m.stock)} ${esc(m.unit)}</span></button>`; }).join('')}</div>`;
@@ -231,10 +239,11 @@
   // ---------- sayfa başlığı ----------
   function renderPaneHead() {
     const H = $('paneHead');
-    const btns = (extra) => `<div class="ph-actions">${canWrite() ? `<button class="btn primary sm" data-action="new-movement" data-kind="in">${ICON.in} Giriş fişi</button><button class="btn sm" data-action="new-movement" data-kind="out">${ICON.out} Çıkış fişi</button>` : ''}${extra || ''}</div>`;
+    const btns = (extra) => `<div class="ph-actions">${canWrite() ? `<button class="btn primary sm" data-action="new-movement" data-kind="in">${ICON.in} Giriş fişi</button><button class="btn sm" data-action="new-movement" data-kind="out">${ICON.out} Çıkış fişi</button><button class="btn sm" data-action="new-movement" data-kind="ret">${ICON.ret} Geri dönen</button>` : ''}${extra || ''}</div>`;
     if (S.view === 'dashboard') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Genel bakış</h1><div class="ph-sub"><span class="date">${fmtDate(todayIso())}</span><span>Fabrika depo stoğu, bugünkü hareketler ve aktif alarmlar</span></div></div>${btns()}</div><div style="height:16px"></div>`;
     else if (S.view === 'materials') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Malzemeler ve stok</h1><div class="ph-sub"><span>${S.materials.filter(m => m.active).length} aktif malzeme</span><span>Minimum limiti her malzemenin kartından ayarlayın</span></div></div>${btns(canWrite() ? `<button class="btn sm" data-action="new-material">${ICON.plus} Malzeme kartı</button>` : '')}</div><div style="height:16px"></div>`;
-    else if (S.view === 'movements') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Hareketler</h1><div class="ph-sub"><span>Giriş, çıkış ve düzeltme belgeleri</span><span>Her belge için PDF fişi hazırdır</span></div></div>${btns(canWrite() ? `<button class="btn sm" data-action="new-movement" data-kind="adj">${ICON.adj} Düzeltme</button>` : '')}</div><div style="height:16px"></div>`;
+    else if (S.view === 'orders') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Gelmekte olan siparişler</h1><div class="ph-sub"><span>${S.orders.stats.active ? S.orders.stats.active + ' bekleyen sipariş' : 'Bekleyen sipariş yok'}${S.orders.stats.overdue ? ` · <span class="late-txt">${S.orders.stats.overdue} tarihi geçmiş</span>` : ''}</span><span>Sipariş stoğa etki etmez; mal geldiğinde <b>Stoğa ekle</b> ile giriş fişi oluşur</span></div></div><div class="ph-actions">${canWrite() ? `<button class="btn primary sm" data-action="new-order">${ICON.plus} Yeni sipariş</button>` : ''}</div></div><div style="height:16px"></div>`;
+    else if (S.view === 'movements') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Hareketler</h1><div class="ph-sub"><span>Giriş, çıkış, geri dönen ve düzeltme belgeleri</span><span>Her belge için PDF fişi hazırdır</span></div></div>${btns(canWrite() ? `<button class="btn sm" data-action="new-movement" data-kind="adj">${ICON.adj} Düzeltme</button>` : '')}</div><div style="height:16px"></div>`;
     else if (S.view === 'alerts') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Alarmlar</h1><div class="ph-sub"><span>${S.alerts.open.length ? S.alerts.open.length + ' aktif alarm' : 'Aktif alarm yok'}</span><span>Stok, kartında belirlenen minimum limitin altına düşünce alarm açılır; limitin üstüne çıkınca kendiliğinden kapanır</span></div></div>${btns()}</div><div style="height:16px"></div>`;
     else if (S.view === 'chat') H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>Sohbet</h1><div class="ph-sub"><span>Depo ekibinin ortak kanalları</span><span>Mesajlar saklanır; @ad ile birine seslenebilirsiniz</span></div></div><div class="ph-actions">${canWrite() ? `<button class="btn sm" data-action="new-channel">${ICON.plus} Yeni kanal</button>` : ''}</div></div>`;
     else if (S.view === 'material') {
@@ -242,7 +251,7 @@
       if (!m) { H.innerHTML = '<div class="ph-row"><div class="ph-title"><h1>Yükleniyor…</h1></div></div><div style="height:16px"></div>'; return; }
       const del = !!m.deleted_at;
       H.innerHTML = `<div class="ph-row"><div class="ph-title"><h1>${esc(m.name)} ${del ? '<span class="pill cancel">Silindi</span>' : statePill(m)}</h1><div class="ph-sub"><span class="mono">${esc(m.code)}</span>${m.category ? `<span>${esc(m.category)}</span>` : ''}${m.location ? `<span>${esc(m.location)}</span>` : ''}<span>birim: ${esc(m.unit)}</span></div></div>
-        <div class="ph-actions">${canWrite() && m.active && !del ? `<button class="btn primary sm" data-action="new-movement" data-kind="in" data-material="${m.id}">${ICON.in} Giriş</button><button class="btn sm" data-action="new-movement" data-kind="out" data-material="${m.id}">${ICON.out} Çıkış</button><button class="btn sm" data-action="new-movement" data-kind="adj" data-material="${m.id}">${ICON.adj} Düzeltme</button>` : ''}${canWrite() && !del ? `<button class="btn sm" data-action="set-limit" data-id="${m.id}">${ICON.alert} Limit</button><button class="btn sm" data-action="edit-material" data-id="${m.id}">${ICON.edit} Düzenle</button>` : ''}${isAdmin() && !del ? `<button class="btn sm danger" data-action="delete-material" data-id="${m.id}" title="Kartı sil">${ICON.trash}</button>` : ''}${isAdmin() && del ? `<button class="btn primary sm" data-action="restore-material" data-id="${m.id}">${ICON.restore} Geri al</button>` : ''}</div></div><div style="height:16px"></div>`;
+        <div class="ph-actions">${canWrite() && m.active && !del ? `<button class="btn primary sm" data-action="new-movement" data-kind="in" data-material="${m.id}">${ICON.in} Giriş</button><button class="btn sm" data-action="new-movement" data-kind="out" data-material="${m.id}">${ICON.out} Çıkış</button><button class="btn sm" data-action="new-movement" data-kind="ret" data-material="${m.id}">${ICON.ret} Geri dönen</button><button class="btn sm" data-action="new-movement" data-kind="adj" data-material="${m.id}">${ICON.adj} Düzeltme</button>` : ''}${canWrite() && !del ? `<button class="btn sm" data-action="set-limit" data-id="${m.id}">${ICON.alert} Limit</button><button class="btn sm" data-action="edit-material" data-id="${m.id}">${ICON.edit} Düzenle</button>` : ''}${isAdmin() && !del ? `<button class="btn sm danger" data-action="delete-material" data-id="${m.id}" title="Kartı sil">${ICON.trash}</button>` : ''}${isAdmin() && del ? `<button class="btn primary sm" data-action="restore-material" data-id="${m.id}">${ICON.restore} Geri al</button>` : ''}</div></div><div style="height:16px"></div>`;
     }
   }
 
@@ -253,6 +262,7 @@
     else if (S.view === 'materials') B.innerHTML = `<div class="scroll">${materialsHtml()}</div>`;
     else if (S.view === 'movements') B.innerHTML = `<div class="scroll">${movementsHtml()}</div>`;
     else if (S.view === 'alerts') B.innerHTML = `<div class="scroll">${alertsHtml()}</div>`;
+    else if (S.view === 'orders') B.innerHTML = `<div class="scroll">${ordersHtml()}</div>`;
     else if (S.view === 'material') B.innerHTML = `<div class="scroll">${materialHtml()}</div>`;
     else if (S.view === 'chat') { B.innerHTML = `<div class="chat"><aside class="channels" id="channels"></aside><section class="chat-main" id="chatMain"><div class="chan-head" id="chanHead"></div><div class="msgs" id="msgs"></div><div class="typing" id="typing"></div><div class="composer-wrap" id="composerWrap"></div></section></div>`; renderChannels(); renderChanHead(); renderMessages(); renderComposer(); renderTyping(); }
   }
@@ -265,12 +275,14 @@
       <button class="tile near" data-action="chip-go" data-chip="near"><span class="v">${d.near}</span><span class="l">Limite yaklaşan</span></button>
       <button class="tile in" data-action="go" data-href="#/hareketler?kind=in"><span class="v">${d.todayIn}</span><span class="l">Bugün giriş <span class="muted">· hafta ${d.weekIn}</span></span></button>
       <button class="tile out" data-action="go" data-href="#/hareketler?kind=out"><span class="v">${d.todayOut}</span><span class="l">Bugün çıkış <span class="muted">· hafta ${d.weekOut}</span></span></button>
+      <button class="tile orders ${d.orders && d.orders.overdue ? 'late' : ''}" data-action="go" data-href="#/siparisler"><span class="v">${d.orders ? d.orders.active : 0}</span><span class="l">Gelmekte olan sipariş${d.orders && d.orders.overdue ? ` <span class="late-txt">· ${d.orders.overdue} gecikmiş</span>` : ''}</span></button>
     </div>`;
     const recent = `<div class="card"><h3>${ICON.chart} Son hareketler <button class="btn ghost sm" data-action="go" data-href="#/hareketler">Tümü</button></h3>${d.recent.length ? `<div class="list">${d.recent.map(mvRow).join('')}</div>` : emptyHtml('Henüz hareket yok', canWrite() ? 'İlk giriş fişini oluşturarak başlayın.' : 'Kayıt girildiğinde burada görünür.')}</div>`;
     const alerts = `<div class="card t-rose"><h3>${ICON.alert} Aktif alarmlar <button class="btn ghost sm" data-action="go" data-href="#/alarmlar">Tümü</button></h3>${d.alerts.length ? d.alerts.slice(0, 8).map(alertCard).join('') : `<p class="muted" style="margin:0">Limitin altında malzeme yok. ${d.noLimit ? d.noLimit + ' malzemenin minimum limiti tanımlı değil.' : ''}</p>`}</div>`;
     const near = d.nearList.length ? `<div class="card t-sand"><h3>${ICON.box} Limite yaklaşanlar</h3><div class="list">${d.nearList.map(m => `<button class="linkrow" data-action="go" data-href="#/malzeme/${m.id}"><span class="row"><span class="grow"><span class="t">${esc(m.name)}</span><span class="s">${esc(m.code)} · limit ${fmtNum(m.min_stock)} ${esc(m.unit)}</span></span>${meter(m, '90px')}<span class="d" style="color:var(--warn)">${fmtNum(m.stock)} ${esc(m.unit)}</span></span></button>`).join('')}</div></div>` : '';
+    const nextOrders = d.orders && d.orders.next.length ? `<div class="card t-sky"><h3>${ICON.order} Beklenen teslimatlar <button class="btn ghost sm" data-action="go" data-href="#/siparisler">Tümü</button></h3><div class="list">${d.orders.next.map(o => `<button class="linkrow" data-action="open-order" data-id="${o.id}"><span class="row"><span class="grow"><span class="t">${esc(o.order_no)}${o.supplier ? ' · ' + esc(o.supplier) : ''}</span><span class="s">${esc(o.summary || '')}${o.total_received ? ` · ${fmtNum(o.total_received)} / ${fmtNum(o.total_qty)} geldi` : ''}</span></span><span class="d ${o.expected_date && o.expected_date < d.today ? 'due' : ''}">${o.expected_date ? fmtDate(o.expected_date) : '<span class="muted">tarih yok</span>'}</span></span></button>`).join('')}</div></div>` : '';
     const online = `<div class="card"><h3>${ICON.team} Şu an bağlı</h3><div class="tagrow">${S.peers.length ? S.peers.map(u => `<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px">${avatarHtml(u, 'sm')} ${esc(u.name)}</span>`).join('') : '<span class="muted small">Yalnızca siz</span>'}</div></div>`;
-    return tiles + `<div class="grid2"><div>${recent}</div><div>${alerts}${near}${online}</div></div>`;
+    return tiles + `<div class="grid2"><div>${recent}</div><div>${alerts}${nextOrders}${near}${online}</div></div>`;
   }
   function alertCard(a) {
     const resolved = !!a.resolved_at;
@@ -294,10 +306,10 @@
 
   function movementsHtml() {
     const M = S.mv;
-    const seg = `<div class="seg">${[['', 'Tümü'], ['in', 'Giriş'], ['out', 'Çıkış'], ['adj', 'Düzeltme']].map(([k, l]) => `<button class="${M.kind === k ? 'on k' + k : ''}" data-action="mv-kind" data-kind="${k}">${k ? ICON[k] : ''}${l}</button>`).join('')}</div>`;
+    const seg = `<div class="seg">${[['', 'Tümü'], ['in', 'Giriş'], ['out', 'Çıkış'], ['ret', 'Geri dönen'], ['adj', 'Düzeltme']].map(([k, l]) => `<button class="${M.kind === k ? 'on k' + k : ''}" data-action="mv-kind" data-kind="${k}">${k ? ICON[k] : ''}${l}</button>`).join('')}</div>`;
     const toolbar = `<div class="toolbar">${seg}<input type="search" id="mvQ" placeholder="Belge no, malzeme, talimat veren, plaka…" value="${esc(M.q)}" data-action="mv-q"><input type="date" id="mvFrom" value="${M.from}" data-action="mv-date" data-k="from" title="Başlangıç"><input type="date" id="mvTo" value="${M.to}" data-action="mv-date" data-k="to" title="Bitiş"><label class="small muted" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" ${M.cancelled ? 'checked' : ''} data-action="mv-cancelled"> İptalleri göster</label><span class="spacer"></span><a class="btn sm" href="/api/export/movements.csv?${new URLSearchParams({ kind: M.kind, from: M.from, to: M.to, q: M.q, cancelled: M.cancelled ? '1' : '' })}" download>${ICON.download} Excel/CSV</a></div>`;
     if (!M.rows.length) return toolbar + emptyHtml('Belge bulunamadı', M.q || M.kind || M.from ? 'Filtreleri gevşetip yeniden deneyin.' : 'Henüz giriş veya çıkış belgesi oluşturulmadı.');
-    const rows = M.rows.map(r => `<tr class="rowlink ${r.cancelled ? 'cancelled' : ''}" data-action="open-doc" data-id="${r.id}"><td class="mono"><span class="t">${esc(r.doc_no)}</span></td><td><span class="pill ${r.cancelled ? 'cancel' : r.kind}">${r.cancelled ? 'İptal' : KIND[r.kind]}</span></td><td class="date">${fmtDate(r.doc_date)}<div class="s muted">${fmtTime(r.created_at)}</div></td><td><div class="t">${esc(r.summary || '')}${r.line_count > 3 ? ' …' : ''}</div><div class="s">${r.line_count} kalem</div></td><td>${esc(r.ordered_by)}</td><td>${esc(r.counterparty || '—')}${r.vehicle ? `<div class="s mono">${esc(r.vehicle)}</div>` : ''}</td><td>${esc(r.created_by_name || '')}</td><td class="acts"><a class="icon-btn" title="PDF fişi" href="/api/movements/${r.id}/pdf" target="_blank" rel="noopener" data-stop="1">${ICON.pdf}</a></td></tr>`).join('');
+    const rows = M.rows.map(r => `<tr class="rowlink ${r.cancelled ? 'cancelled' : ''}" data-action="open-doc" data-id="${r.id}"><td class="mono"><span class="t">${esc(r.doc_no)}</span></td><td><span class="pill ${r.cancelled ? 'cancel' : r.kind}">${r.cancelled ? 'İptal' : KIND[r.kind]}</span>${r.order_id ? `<div class="s muted">siparişten</div>` : ''}</td><td class="date">${fmtDate(r.doc_date)}<div class="s muted">${fmtTime(r.created_at)}</div></td><td><div class="t">${esc(r.summary || '')}${r.line_count > 3 ? ' …' : ''}</div><div class="s">${r.line_count} kalem</div></td><td>${esc(r.ordered_by)}</td><td>${esc(r.counterparty || '—')}${r.vehicle ? `<div class="s mono">${esc(r.vehicle)}</div>` : ''}</td><td>${esc(r.created_by_name || '')}</td><td class="acts"><a class="icon-btn" title="PDF fişi" href="/api/movements/${r.id}/pdf" target="_blank" rel="noopener" data-stop="1">${ICON.pdf}</a></td></tr>`).join('');
     const pager = `<div class="pager"><span>${M.offset + 1}–${Math.min(M.offset + M.limit, M.total)} / ${M.total}</span><button class="btn sm" data-action="mv-page" data-d="-1" ${M.offset === 0 ? 'disabled' : ''}>Önceki</button><button class="btn sm" data-action="mv-page" data-d="1" ${M.offset + M.limit >= M.total ? 'disabled' : ''}>Sonraki</button></div>`;
     return toolbar + `<div class="table-card"><div class="tablewrap"><table class="stock"><thead><tr><th>Belge</th><th>Tür</th><th>Tarih</th><th>Kalemler</th><th>Talimatı veren</th><th>Karşı taraf</th><th>Kaydeden</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${pager}</div>`;
   }
@@ -344,7 +356,7 @@
   function renderInbox() {
     const box = $('inbox'); if (!S.inboxOpen) { box.hidden = true; return; }
     const items = S.activity; let last = '';
-    const icon = (a) => a.kind === 'alert' ? ICON.alert : a.kind === 'movement' ? ICON.chart : a.kind === 'material' ? ICON.box : a.kind === 'chat' ? ICON.chat : ICON.team;
+    const icon = (a) => a.kind === 'alert' ? ICON.alert : a.kind === 'movement' ? ICON.chart : a.kind === 'material' ? ICON.box : a.kind === 'chat' ? ICON.chat : a.kind === 'order' ? ICON.order : ICON.team;
     const body = items.length ? items.map(a => { const day = dayOf(a.ts); let h = ''; if (day !== last) { last = day; h += `<div class="ib-day">${day === todayIso() ? 'Bugün' : fmtDate(day)}</div>`; } const unread = a.ts > S.inboxSeen && a.user_id !== S.me.id; const u = a.user_id ? userById(a.user_id) || { name: a.user_name, color: a.user_color } : null; return h + `<button class="ib-item ${unread ? 'is-unread' : ''}" data-action="inbox-go" data-ref='${esc(JSON.stringify(a.ref || {}))}'>${u ? avatarHtml(u) : `<span class="av" style="background:var(--bad)">${a.kind === 'alert' ? '!' : '•'}</span>`}<span class="ib-body"><span class="ib-text"><b>${esc(a.title)}</b></span>${a.text ? `<span class="ib-prev">${esc(a.text)}</span>` : ''}<span class="ib-meta">${icon(a)} ${fmtTime(a.ts)}${u ? ' · ' + esc(u.name) : ''}</span></span><span class="ib-dot"></span></button>`; }).join('') : `<div class="ib-empty">${ICON.bell}<p>Henüz kayıt yok. Hareketler, alarmlar ve ekip değişiklikleri burada listelenir.</p></div>`;
     box.innerHTML = `<div class="ib-head"><h2>${ICON.bell} Bildirimler</h2><div class="ib-tools"><button class="btn ghost sm" data-action="inbox-read-all">Tümünü okundu say</button><button class="icon-btn" data-action="close-inbox" aria-label="Kapat">${ICON.x}</button></div></div><div class="ib-list">${body}</div>`;
     box.hidden = false;
@@ -391,7 +403,7 @@
     if (!S.materials.some(m => m.active)) { toast('Önce bir malzeme kartı oluşturun.'); return materialForm(); }
     let sug = { orderedBy: [], suppliers: [], destinations: [], team: [] }; try { sug = await api('GET', '/api/movements/suggest'); } catch (e) {}
     F = { kind: kind || 'in', lines: [{ material_id: materialId || '', qty: '', note: '' }], sug };
-    modal(modalHead('Yeni belge', '') + `<div class="kind-seg">${[['in', 'Giriş fişi', 'Depoya malzeme girişi'], ['out', 'Çıkış fişi', 'Depodan çıkış / sevkiyat'], ['adj', 'Düzeltme', 'Sayım farkı, fire (± miktar)']].map(([k, t, s]) => `<button type="button" class="k${k} ${F.kind === k ? 'on' : ''}" data-action="form-kind" data-kind="${k}"><strong>${ICON[k]} ${t}</strong><small>${s}</small></button>`).join('')}</div>
+    modal(modalHead('Yeni belge', '') + `<div class="kind-seg">${[['in', 'Giriş fişi', 'Depoya malzeme girişi'], ['out', 'Çıkış fişi', 'Depodan çıkış / sevkiyat'], ['ret', 'Geri dönen', 'Şantiyeden / üretimden depoya iade'], ['adj', 'Düzeltme', 'Sayım farkı, fire (± miktar)']].map(([k, t, s]) => `<button type="button" class="k${k} ${F.kind === k ? 'on' : ''}" data-action="form-kind" data-kind="${k}"><strong>${ICON[k]} ${t}</strong><small>${s}</small></button>`).join('')}</div>
       <form id="mvForm"><div id="err" class="err" hidden></div><div class="form-grid">
         <label class="f">Belge tarihi<input type="date" name="doc_date" value="${todayIso()}" required></label>
         <label class="f">Talimatı / siparişi veren *<input type="text" name="ordered_by" list="dlOrdered" required placeholder="Ad Soyad" ${materialId ? '' : 'autofocus'}></label>
@@ -402,7 +414,7 @@
       <div style="margin-top:18px"><div class="eyebrow" style="margin-bottom:8px">Malzeme satırları</div><div class="line-head"><span>Malzeme</span><span style="text-align:right">Miktar</span><span>Birim</span><span></span></div><div class="lines" id="lines"></div>
       <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button type="button" class="btn sm" data-action="add-line">${ICON.plus} Satır ekle</button><span class="hint-row">Miktar alanında <span class="kbd">Enter</span> yeni satır açar.</span></div><div id="preview"></div></div>
       <label class="f" style="margin-top:14px">Açıklama<textarea name="notes" rows="2" placeholder="Belgeye yazılacak not (isteğe bağlı)"></textarea></label>
-      ${datalist('dlOrdered', [...new Set([...sug.orderedBy, ...sug.team])])}${datalist('dlSup', sug.suppliers)}${datalist('dlDest', sug.destinations)}
+      ${datalist('dlOrdered', [...new Set([...sug.orderedBy, ...sug.team])])}${datalist('dlSup', sug.suppliers)}${datalist('dlDest', sug.destinations)}${datalist('dlRet', [...new Set([...(sug.returners || []), ...sug.destinations])])}
       <div class="form-actions"><span class="muted small" id="docHint"></span><div class="right"><button type="button" class="btn" data-action="close-modal">Vazgeç</button><button class="btn primary" type="submit" id="mvSubmit">Kaydet ve fişi oluştur</button></div></div></form>`);
     renderFormKind(); renderLines();
     $('mvForm').addEventListener('submit', submitMovement);
@@ -412,10 +424,10 @@
   }
   function renderFormKind() {
     const k = F.kind; document.querySelectorAll('.kind-seg button').forEach(b => b.classList.toggle('on', b.dataset.kind === k));
-    const lbl = { in: ['Tedarikçi / teslim eden', 'Firma veya kişi', 'dlSup'], out: ['Teslimat yeri / alıcı', 'Şantiye, proje, firma veya kişi', 'dlDest'], adj: ['Düzeltme nedeni / dayanak', 'Ekim sayımı, hasar, fire…', ''] }[k];
+    const lbl = { in: ['Tedarikçi / teslim eden', 'Firma veya kişi', 'dlSup'], out: ['Teslimat yeri / alıcı', 'Şantiye, proje, firma veya kişi', 'dlDest'], ret: ['Nereden döndü (şantiye / proje / kişi)', 'Geri gönderen şantiye, proje veya kişi', 'dlRet'], adj: ['Düzeltme nedeni / dayanak', 'Ekim sayımı, hasar, fire…', ''] }[k];
     const cur = document.querySelector('[name=counterparty]'); const val = cur ? cur.value : '';
     $('cpLabel').innerHTML = `${lbl[0]}<input type="text" name="counterparty" placeholder="${lbl[1]}" ${lbl[2] ? 'list="' + lbl[2] + '"' : ''} value="${esc(val)}">`;
-    $('docHint').textContent = { in: 'Belge numarası GRS-YYYY-NNNNN olarak verilir.', out: 'Belge numarası SVK-YYYY-NNNNN olarak verilir.', adj: 'Düzeltmede miktar artı (fazla) veya eksi (eksik) girilir; DZL-YYYY-NNNNN.' }[k];
+    $('docHint').textContent = { in: 'Belge numarası GRS-YYYY-NNNNN olarak verilir.', out: 'Belge numarası SVK-YYYY-NNNNN olarak verilir.', ret: 'Geri dönen malzeme stoğa eklenir; belge numarası GDN-YYYY-NNNNN.', adj: 'Düzeltmede miktar artı (fazla) veya eksi (eksik) girilir; DZL-YYYY-NNNNN.' }[k];
     document.querySelector('.modal-head h2').textContent = KIND_LONG[k];
     refreshLinePreview();
   }
@@ -435,6 +447,7 @@
   function hidePickers() { document.querySelectorAll('.picker-menu').forEach(m => m.remove()); }
   function refreshLinePreview() {
     if (!F || !$('preview')) return;
+    if (F.mode === 'order') { $('preview').innerHTML = ''; return; }
     const running = new Map(); const warns = []; let bad = false;
     for (const l of F.lines) { const m = S.matById.get(l.material_id); if (!m) continue; const q = parseFloat(String(l.qty).replace(',', '.')); if (!Number.isFinite(q) || q === 0) continue; const before = running.has(m.id) ? running.get(m.id) : m.stock; const after = before + (F.kind === 'in' ? q : F.kind === 'out' ? -q : q); running.set(m.id, after);
       if (after < 0) { bad = true; warns.push(`<div class="preview-warn bad">${ICON.alert}<span><b>${esc(m.name)}</b>: stok yetersiz — mevcut ${fmtNum(before)} ${esc(m.unit)}, sonuç ${fmtNum(after)} ${esc(m.unit)}.${S.settings.allowNegative ? ' Eksi stok ayarlarda açık olduğundan kaydedilebilir.' : ' Bu belge kaydedilemez.'}</span></div>`); }
@@ -456,12 +469,12 @@
   // --- belge görünümü ---
   async function openMovement(id) { try { const r = await api('GET', '/api/movements/' + id); showMovement(r.movement); } catch (e) { toast(e.message); } }
   function showMovement(mv, justCreated) {
-    const k = mv.kind; const party = { in: 'Tedarikçi / teslim eden', out: 'Teslimat yeri / alıcı', adj: 'Düzeltme nedeni' }[k];
+    const k = mv.kind; const party = { in: 'Tedarikçi / teslim eden', out: 'Teslimat yeri / alıcı', ret: 'Nereden döndü', adj: 'Düzeltme nedeni' }[k];
     const total = mv.lines.reduce((s, l) => s + Number(l.qty), 0); const units = new Set(mv.lines.map(l => l.unit));
     modal(`<div data-doc-id="${mv.id}">${modalHead(`${esc(mv.doc_no)} <span class="pill ${mv.cancelled ? 'cancel' : k}">${mv.cancelled ? 'İptal edildi' : KIND[k]}</span>`, KIND_LONG[k])}
       ${justCreated ? `<div class="ok-note" style="margin:0 0 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${ICON.ok} Belge kaydedildi ve stok güncellendi. <a class="btn primary sm" href="/api/movements/${mv.id}/pdf" target="_blank" rel="noopener">${ICON.pdf} PDF fişini aç</a></div>` : ''}
       ${mv.cancelled ? `<div class="err" style="margin-bottom:14px"><span class="doc-stamp">İPTAL</span> &nbsp; ${fmtDT(mv.cancelled_at)} · ${esc(mv.cancelled_by_name || '')}${mv.cancel_reason ? ' · ' + esc(mv.cancel_reason) : ''} — stok etkisi geri alındı.</div>` : ''}
-      <div class="doc-head"><div class="f">Belge tarihi<span>${fmtDate(mv.doc_date)}</span></div><div class="f">Talimatı / siparişi veren<span>${esc(mv.ordered_by)}</span></div><div class="f">${party}<span>${esc(mv.counterparty || '—')}</span></div><div class="f">İrsaliye / referans<span>${esc(mv.reference || '—')}</span></div><div class="f">Araç plakası<span class="mono">${esc(mv.vehicle || '—')}</span></div><div class="f">Kaydı yapan<span>${esc(mv.created_by_name || '')} <span class="muted small">${fmtDT(mv.created_at)}</span></span></div></div>
+      <div class="doc-head"><div class="f">Belge tarihi<span>${fmtDate(mv.doc_date)}</span></div><div class="f">Talimatı / siparişi veren<span>${esc(mv.ordered_by)}</span></div>${mv.order_no ? `<div class="f">Sipariş / teslimat<span><a href="#/siparis/${mv.order_id}" data-action="go-close" data-href="#/siparis/${mv.order_id}">${esc(mv.order_no)}</a></span></div>` : ''}<div class="f">${party}<span>${esc(mv.counterparty || '—')}</span></div><div class="f">İrsaliye / referans<span>${esc(mv.reference || '—')}</span></div><div class="f">Araç plakası<span class="mono">${esc(mv.vehicle || '—')}</span></div><div class="f">Kaydı yapan<span>${esc(mv.created_by_name || '')} <span class="muted small">${fmtDT(mv.created_at)}</span></span></div></div>
       ${mv.notes ? `<div class="f" style="margin-bottom:12px">Açıklama<span style="color:var(--fg);font-weight:400">${esc(mv.notes)}</span></div>` : ''}
       <div class="table-card doc-lines"><table class="stock"><thead><tr><th>#</th><th>Kod</th><th>Malzeme</th><th>Birim</th><th class="r">Miktar</th><th class="r">Önceki</th><th class="r">Kalan</th></tr></thead><tbody>${mv.lines.map(l => `<tr class="rowlink" data-action="go-close" data-href="#/malzeme/${l.material_id}"><td class="muted">${l.pos}</td><td class="mono">${esc(l.material_code)}</td><td><div class="t">${esc(l.material_name)}</div>${l.note ? `<div class="s">${esc(l.note)}</div>` : ''}</td><td>${esc(l.unit)}</td><td class="num">${k === 'adj' && l.qty > 0 ? '+' : ''}${fmtNum(l.qty)}</td><td class="r muted">${fmtNum(l.stock_before)}</td><td class="num">${fmtNum(l.stock_after)}</td></tr>`).join('')}</tbody></table>${units.size === 1 ? `<div class="pager" style="justify-content:space-between"><span>${mv.lines.length} kalem</span><span>Toplam <b>${fmtNum(total)} ${esc([...units][0])}</b></span></div>` : ''}</div>
       <div class="form-actions"><div style="display:flex;gap:6px;flex-wrap:wrap">${isAdmin() && !mv.cancelled ? `<button class="btn danger sm" data-action="cancel-doc" data-id="${mv.id}">İptal et</button>` : ''}${canWrite() && !mv.cancelled && (mv.created_by === S.me.id || isAdmin()) ? `<button class="btn sm" data-action="edit-doc" data-id="${mv.id}">${ICON.edit} Bilgileri düzenle</button>` : ''}</div><div class="right"><a class="btn sm" href="/api/movements/${mv.id}/pdf?dl" download>${ICON.download} İndir</a><a class="btn ${justCreated ? '' : 'primary'} sm" href="/api/movements/${mv.id}/pdf" target="_blank" rel="noopener">${ICON.pdf} PDF fişi</a><button class="btn sm" data-action="close-modal">Kapat</button></div></div></div>`);
@@ -525,6 +538,96 @@
   }
   const linkNote = (name, url, emailed) => `<div class="ok-note" style="margin:0 0 14px">${emailed ? `${esc(name)} için davet e-postası gönderildi.` : `${esc(name)} için bağlantı hazır — kopyalayıp iletin (7 gün geçerli):`}<div class="copybox"><input type="text" readonly value="${esc(url)}" onclick="this.select()"><button type="button" class="btn sm" data-action="copy" data-text="${esc(url)}">Kopyala</button></div></div>`;
 
+
+  // ---------- gelmekte olan siparişler ----------
+  const O = S.orders;
+  async function loadOrderStats() { try { const r = await api('GET', '/api/orders?status=active&limit=1'); O.stats = r.stats; renderRail(); if (S.view === 'orders') renderPaneHead(); } catch (e) {} }
+  async function loadOrders() { try { const r = await api('GET', `/api/orders?status=${O.status}&q=${encodeURIComponent(O.q)}&limit=100`); O.rows = r.orders; O.total = r.total; O.stats = r.stats; renderRail(); if (S.view === 'orders') { renderPaneHead(); renderPaneBody(); } } catch (e) { toast(e.message); } }
+  const ostatusPill = (st) => { const [cls, l] = OSTATUS[st] || ['none', st]; return `<span class="pill ${cls}">${l}</span>`; };
+  const progressMeter = (recv, total) => { const pct = total > 0 ? Math.min(100, recv / total * 100) : 0; return `<div class="meter ${pct >= 100 ? 'g-ok' : pct > 0 ? 'g-info' : 'g-none'}" style="width:90px" title="${fmtNum(recv)} / ${fmtNum(total)}"><i style="width:${pct.toFixed(1)}%"></i></div>`; };
+  function ordersHtml() {
+    const today = todayIso();
+    const seg = `<div class="seg">${[['active', 'Bekleyen'], ['done', 'Tamamlanan'], ['cancelled', 'İptal'], ['', 'Tümü']].map(([k, l]) => `<button class="${O.status === k ? 'on' : ''}" data-action="ord-status" data-status="${k}">${l}</button>`).join('')}</div>`;
+    const toolbar = `<div class="toolbar">${seg}<input type="search" placeholder="Sipariş no, tedarikçi, malzeme…" value="${esc(O.q)}" data-action="ord-q"><span class="spacer"></span><span class="count">${O.total} sipariş</span></div>`;
+    if (!O.rows.length) return toolbar + emptyHtml(O.q ? 'Eşleşen sipariş yok' : O.status === 'active' ? 'Bekleyen sipariş yok' : 'Kayıt yok', O.status === 'active' && !O.q ? 'Tedarikçiye verilen siparişi burada kaydedin; mal geldiğinde "Stoğa ekle" ile giriş fişi oluşturulur.' : 'Filtreyi değiştirip yeniden deneyin.', ICON.order);
+    const rows = O.rows.map(o => { const late = o.expected_date && o.expected_date < today && (o.status === 'open' || o.status === 'partial'); const active = o.status === 'open' || o.status === 'partial';
+      return `<tr class="rowlink ${late ? 'low' : ''}" data-action="open-order" data-id="${o.id}"><td class="mono"><span class="t">${esc(o.order_no)}</span></td><td>${esc(o.supplier || '—')}</td><td class="date">${o.expected_date ? fmtDate(o.expected_date) : '<span class="muted">—</span>'}${late ? '<div class="s late-txt">gecikti</div>' : ''}</td><td><div class="t">${esc(o.summary || '')}${o.line_count > 3 ? ' …' : ''}</div><div class="s">${o.line_count} kalem</div></td><td>${progressMeter(o.total_received || 0, o.total_qty || 0)}<div class="s muted">${fmtNum(o.total_received || 0)} / ${fmtNum(o.total_qty || 0)}</div></td><td>${ostatusPill(o.status)}</td><td>${esc(o.ordered_by || '')}<div class="s muted">${esc(o.created_by_name || '')}</div></td><td class="acts">${active && canWrite() ? `<button class="btn primary sm" data-action="receive-order" data-id="${o.id}">${ICON.in} Stoğa ekle</button>` : ''}</td></tr>`; }).join('');
+    return toolbar + `<div class="table-card"><div class="tablewrap"><table class="stock"><thead><tr><th>Sipariş / teslimat no</th><th>Tedarikçi</th><th>Beklenen</th><th>Kalemler</th><th>Gelen</th><th>Durum</th><th>Siparişi veren</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+  async function openOrder(id) { try { const r = await api('GET', '/api/orders/' + id); showOrder(r.order); } catch (e) { toast(e.message); } }
+  function showOrder(o) {
+    const today = todayIso(); const active = o.status === 'open' || o.status === 'partial'; const mine = o.created_by === S.me.id || isAdmin();
+    const late = o.expected_date && o.expected_date < today && active;
+    modal(`<div data-order-id="${o.id}">${modalHead(`${esc(o.order_no)} ${ostatusPill(o.status)}`, 'Gelmekte olan sipariş')}
+      ${o.status === 'cancelled' ? `<div class="err" style="margin-bottom:14px">İptal edildi · ${fmtDT(o.closed_at)}${o.closed_by_name ? ' · ' + esc(o.closed_by_name) : ''}${o.cancel_reason ? ' · ' + esc(o.cancel_reason) : ''}</div>` : ''}
+      ${o.status === 'done' ? `<div class="ok-note" style="margin:0 0 14px">${ICON.ok} Siparişin tamamı stoğa eklendi · ${fmtDT(o.closed_at)}${o.closed_by_name ? ' · ' + esc(o.closed_by_name) : ''}</div>` : ''}
+      <div class="doc-head"><div class="f">Tedarikçi<span>${esc(o.supplier || '—')}</span></div><div class="f">Beklenen tarih<span class="${late ? 'late-txt' : ''}">${o.expected_date ? fmtDate(o.expected_date) : '—'}${late ? ' · gecikti' : ''}</span></div><div class="f">Siparişi veren<span>${esc(o.ordered_by || '—')}</span></div><div class="f">Kaydeden<span>${esc(o.created_by_name || '')} <span class="muted small">${fmtDT(o.created_at)}</span></span></div></div>
+      ${o.notes ? `<div class="f" style="margin-bottom:12px">Açıklama<span style="color:var(--fg);font-weight:400">${esc(o.notes)}</span></div>` : ''}
+      <div class="table-card doc-lines"><table class="stock"><thead><tr><th>#</th><th>Kod</th><th>Malzeme</th><th>Birim</th><th class="r">Sipariş</th><th class="r">Gelen</th><th class="r">Kalan</th></tr></thead><tbody>${o.lines.map(l => { const rem = Math.max(0, l.qty - l.received); return `<tr class="rowlink" data-action="go-close" data-href="#/malzeme/${l.material_id}"><td class="muted">${l.pos}</td><td class="mono">${esc(l.material_code)}</td><td><div class="t">${esc(l.material_name)}</div>${l.note ? `<div class="s">${esc(l.note)}</div>` : ''}</td><td>${esc(l.unit)}</td><td class="num">${fmtNum(l.qty)}</td><td class="num" style="color:var(--ok)">${fmtNum(l.received)}</td><td class="num ${rem > 0 ? '' : 'muted'}">${fmtNum(rem)}</td></tr>`; }).join('')}</tbody></table></div>
+      ${o.receipts.length ? `<div class="card" style="margin-top:14px"><h3>${ICON.in} Giriş fişleri</h3><div class="list">${o.receipts.map(r => `<button class="linkrow" data-action="open-doc" data-id="${r.id}"><span class="row"><span class="grow"><span class="t ${r.cancelled ? 'muted' : ''}">${esc(r.doc_no)}${r.cancelled ? ' · iptal' : ''}</span><span class="s">${fmtDate(r.doc_date)} ${fmtTime(r.created_at)} · ${esc(r.created_by_name || '')}${r.vehicle ? ' · ' + esc(r.vehicle) : ''}</span></span><span class="d">${fmtNum(r.total_qty || 0)}</span></span></button>`).join('')}</div></div>` : ''}
+      <div class="form-actions"><div style="display:flex;gap:6px;flex-wrap:wrap">${active && mine && canWrite() ? `<button class="btn danger sm" data-action="cancel-order">İptal et</button><button class="btn sm" data-action="edit-order">${ICON.edit} Düzenle</button>` : ''}${o.status === 'cancelled' && mine && canWrite() ? `<button class="btn sm" data-action="reopen-order" data-id="${o.id}">${ICON.restore} Yeniden aç</button>` : ''}</div><div class="right">${active && canWrite() ? `<button class="btn primary" data-action="receive-order" data-id="${o.id}">${ICON.in} Stoğa ekle</button>` : ''}<button class="btn sm" data-action="close-modal">Kapat</button></div></div></div>`);
+    $('modalRoot')._order = o;
+  }
+  async function orderForm(o) {
+    const edit = !!o;
+    if (!S.materials.some(m => m.active)) { toast('Önce bir malzeme kartı oluşturun.'); return materialForm(); }
+    let sug = { orderedBy: [], suppliers: [], team: [] }; try { sug = await api('GET', '/api/movements/suggest'); } catch (e) {}
+    F = { kind: 'in', mode: 'order', lines: edit ? o.lines.map(l => ({ id: l.id, material_id: l.material_id, qty: l.qty, note: l.note || '' })) : [{ material_id: '', qty: '', note: '' }], sug };
+    modal(modalHead(edit ? 'Siparişi düzenle' : 'Yeni gelmekte olan sipariş', edit ? esc(o.order_no) : '') + `<form id="ordForm"><div id="err" class="err" hidden></div>
+      <p class="muted small" style="margin:0 0 14px">Sipariş kaydı stoğu değiştirmez. Mal geldiğinde listeden <b>Stoğa ekle</b> denir; o anda giriş fişi oluşur ve stok artar. Kısmi teslimatlar desteklenir.</p>
+      <div class="form-grid">
+        <label class="f">Sipariş / teslimat numarası *<input type="text" name="order_no" value="${edit ? esc(o.order_no) : ''}" required autofocus placeholder="SIP-2026-014, irsaliye veya sevkiyat no"></label>
+        <label class="f">Beklenen teslim tarihi<input type="date" name="expected_date" value="${edit && o.expected_date ? o.expected_date : ''}"></label>
+        <label class="f">Tedarikçi<input type="text" name="supplier" list="dlSup" value="${edit ? esc(o.supplier || '') : ''}" placeholder="Firma"></label>
+        <label class="f">Siparişi veren<input type="text" name="ordered_by" list="dlOrdered" value="${edit ? esc(o.ordered_by || '') : ''}" placeholder="Ad Soyad"></label>
+      </div>
+      <div style="margin-top:18px"><div class="eyebrow" style="margin-bottom:8px">Sipariş kalemleri</div><div class="line-head"><span>Malzeme</span><span style="text-align:right">Miktar</span><span>Birim</span><span></span></div><div class="lines" id="lines"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button type="button" class="btn sm" data-action="add-line">${ICON.plus} Satır ekle</button><span class="hint-row">Miktar alanında <span class="kbd">Enter</span> yeni satır açar.</span></div><div id="preview"></div></div>
+      <label class="f" style="margin-top:14px">Açıklama<textarea name="notes" rows="2" placeholder="Sipariş notu (isteğe bağlı)">${edit ? esc(o.notes || '') : ''}</textarea></label>
+      ${datalist('dlOrdered', [...new Set([...sug.orderedBy, ...sug.team])])}${datalist('dlSup', sug.suppliers)}
+      <div class="form-actions"><span class="muted small">${edit ? 'Teslim alınmış miktarlar korunur.' : ''}</span><div class="right"><button type="button" class="btn" data-action="${edit ? 'open-order' : 'close-modal'}" data-id="${edit ? o.id : ''}">Vazgeç</button><button class="btn primary" type="submit" id="ordSubmit">${edit ? 'Kaydet' : 'Siparişi kaydet'}</button></div></div></form>`);
+    renderLines();
+    const form = $('ordForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); const err = $('err'); err.hidden = true;
+      const lines = F.lines.filter(l => l.material_id).map(l => ({ id: l.id, material_id: l.material_id, qty: String(l.qty).replace(',', '.'), note: l.note }));
+      if (!lines.length) { err.textContent = 'En az bir malzeme seçin.'; err.hidden = false; return; }
+      const b = { order_no: form.order_no.value, expected_date: form.expected_date.value, supplier: form.supplier.value, ordered_by: form.ordered_by.value, notes: form.notes.value, lines };
+      try { const r = edit ? await api('PATCH', '/api/orders/' + o.id, b) : await api('POST', '/api/orders', b); F = null; toast(edit ? 'Sipariş güncellendi.' : `${r.order.order_no} kaydedildi.`); showOrder(r.order); if (S.view !== 'orders') loadOrderStats(); } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    });
+    form.addEventListener('input', (e) => { if (e.target.closest('.line')) { const row = e.target.closest('.line'); const i = Number(row.dataset.i); if (e.target.name === 'qty') F.lines[i].qty = e.target.value; if (e.target.name === 'note') F.lines[i].note = e.target.value; if (e.target.name === 'msearch') showPicker(row, e.target.value); } });
+    form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.name === 'qty') { e.preventDefault(); addLine(); } if (e.key === 'Enter' && e.target.name === 'msearch') { e.preventDefault(); const first = e.target.closest('.picker').querySelector('.picker-menu button'); if (first) first.click(); } if (e.key === 'Escape' && e.target.name === 'msearch') hidePickers(); });
+    form.addEventListener('focusin', (e) => { if (e.target.name === 'msearch') showPicker(e.target.closest('.line'), e.target.value); });
+  }
+  async function receiveForm(id) {
+    let o; try { o = (await api('GET', '/api/orders/' + id)).order; } catch (e) { return toast(e.message); }
+    const open = o.lines.filter(l => !l.material_deleted);
+    modal(modalHead('Stoğa ekle', `${esc(o.order_no)}${o.supplier ? ' · ' + esc(o.supplier) : ''}`) + `<form id="rcvForm" data-oid="${o.id}"><div id="err" class="err" hidden></div>
+      <p class="muted small" style="margin:0 0 12px">Gelen miktarları yazın; eksik gelen kalemler siparişte beklemeye devam eder. Kaydedince giriş fişi (GRS) oluşur ve stok anında güncellenir.</p>
+      <div class="table-card" style="margin-bottom:14px"><table class="stock"><thead><tr><th>Malzeme</th><th class="r">Sipariş</th><th class="r">Daha önce gelen</th><th class="r">Kalan</th><th style="width:130px">Şimdi gelen</th></tr></thead><tbody>
+      ${open.map(l => { const rem = Math.max(0, l.qty - l.received); return `<tr><td><div class="t">${esc(l.material_name)}</div><div class="s mono">${esc(l.material_code)} · ${esc(l.unit)}</div></td><td class="num">${fmtNum(l.qty)}</td><td class="num muted">${fmtNum(l.received)}</td><td class="num ${rem > 0 ? '' : 'muted'}">${fmtNum(rem)}</td><td><input type="number" name="rqty" step="any" min="0" value="${rem > 0 ? rem : ''}" data-line="${l.id}" data-rem="${rem}" placeholder="0" style="text-align:right"><div class="s rhint"></div></td></tr>`; }).join('')}</tbody></table></div>
+      <div class="form-grid">
+        <label class="f">Teslim tarihi<input type="date" name="doc_date" value="${todayIso()}" required></label>
+        <label class="f">İrsaliye / teslimat no<input type="text" name="reference" value="${esc(o.order_no)}"></label>
+        <label class="f">Araç plakası<input type="text" name="vehicle" placeholder="06 ABC 123" style="text-transform:uppercase"></label>
+        <label class="f">Teslim alma talimatı<input type="text" name="ordered_by" value="${esc(o.ordered_by || S.me.name)}"></label>
+        <label class="f span2">Not<input type="text" name="notes" placeholder="Hasar, eksik, kontrol notu… (isteğe bağlı)"></label>
+      </div>
+      <div class="form-actions"><div class="right"><button type="button" class="btn" data-action="open-order" data-id="${o.id}">Vazgeç</button><button class="btn primary" type="submit">${ICON.in} Stoğa ekle ve fişi oluştur</button></div></div></form>`);
+    updateReceiveHints();
+    $('rcvForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); const f = e.target; const err = $('err'); err.hidden = true;
+      const lines = [...f.querySelectorAll('input[name=rqty]')].map(i => ({ line_id: i.dataset.line, qty: String(i.value).replace(',', '.') })).filter(l => parseFloat(l.qty) > 0);
+      if (!lines.length) { err.textContent = 'En az bir kaleme gelen miktar yazın.'; err.hidden = false; return; }
+      try { const r = await api('POST', `/api/orders/${o.id}/receive`, { lines, doc_date: f.doc_date.value, reference: f.reference.value, vehicle: f.vehicle.value, ordered_by: f.ordered_by.value, notes: f.notes.value }); toast(`${r.movement.doc_no} oluşturuldu; stok güncellendi.`); showMovement(r.movement, true); loadMaterials().then(() => { renderRail(); renderChips(); if (S.view === 'materials') renderPaneBody(); }); if (S.view === 'orders') loadOrders(); else loadOrderStats(); } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    });
+  }
+  function updateReceiveHints() { document.querySelectorAll('#rcvForm input[name=rqty]').forEach(i => { const rem = parseFloat(i.dataset.rem) || 0; const v = parseFloat(String(i.value).replace(',', '.')) || 0; const h = i.parentElement.querySelector('.rhint'); if (!h) return; h.textContent = v > rem ? `Kalan miktarı ${fmtNum(v - rem)} aşıyor` : (v > 0 && v < rem ? `${fmtNum(rem - v)} eksik kalacak` : ''); h.style.color = v > rem ? 'var(--warn)' : 'var(--muted)'; }); }
+  function cancelOrderForm(o) {
+    modal(modalHead('Siparişi iptal et', esc(o.order_no)) + `<form id="coForm"><div id="err" class="err" hidden></div><p style="margin:0 0 12px">Sipariş bekleyenlerden kaldırılır. Daha önce stoğa eklenmiş kısımlar ve giriş fişleri geçerliliğini korur. Gerekirse yeniden açılabilir.</p><label class="f">Neden<input type="text" name="reason" placeholder="Tedarikçi iptal etti, mükerrer kayıt…" autofocus></label>
+      <div class="form-actions"><div class="right"><button type="button" class="btn" data-action="open-order" data-id="${o.id}">Vazgeç</button><button class="btn danger" type="submit">Siparişi iptal et</button></div></div></form>`, 'narrow');
+    $('coForm').addEventListener('submit', async (e) => { e.preventDefault(); try { const r = await api('POST', '/api/orders/' + o.id + '/cancel', { reason: e.target.reason.value }); toast('Sipariş iptal edildi.'); showOrder(r.order); } catch (err) { $('err').textContent = err.message; $('err').hidden = false; } });
+  }
 
   // ---------- malzeme kartı silme (yönetici) ----------
   async function deleteMaterialForm(id) {
@@ -789,6 +892,13 @@
       case 'set-limit': limitForm(S.matById.get(d.id)); break;
       case 'delete-material': deleteMaterialForm(d.id); break;
       case 'restore-material': try { const r = await api('POST', '/api/materials/' + d.id + '/restore', {}); setMaterial(r.material); toast('Kart geri alındı.'); loadMaterials().then(() => { renderRail(); renderChips(); }); if (d.from === 'settings') settingsModal(); else go('#/malzeme/' + d.id); } catch (err) { toast(err.message); } break;
+      case 'new-order': if (!canWrite()) return toast('Hesabınız yalnızca görüntüleme yetkisine sahip.'); orderForm(); break;
+      case 'open-order': openOrder(d.id); break;
+      case 'edit-order': orderForm($('modalRoot')._order); break;
+      case 'receive-order': receiveForm(d.id); break;
+      case 'cancel-order': cancelOrderForm($('modalRoot')._order); break;
+      case 'reopen-order': try { const r = await api('POST', '/api/orders/' + d.id + '/reopen', {}); showOrder(r.order); } catch (err) { toast(err.message); } break;
+      case 'ord-status': S.orders.status = d.status; loadOrders(); renderPaneBody(); break;
       case 'new-channel': channelForm(); break;
       case 'edit-channel': channelForm(curChannel()); break;
       case 'archive-channel': case 'unarchive-channel': try { await api('PATCH', '/api/chat/channels/' + S.chat.cid, { archived: a === 'archive-channel' }); } catch (err) { toast(err.message); } break;
@@ -823,7 +933,7 @@
       case 'open-inbox': S.inboxOpen = !S.inboxOpen; renderInbox(); if (S.inboxOpen) markInboxSeen(); break;
       case 'close-inbox': S.inboxOpen = false; renderInbox(); break;
       case 'inbox-read-all': markInboxSeen(); renderInbox(); break;
-      case 'inbox-go': { let ref = {}; try { ref = JSON.parse(d.ref); } catch (err) {} S.inboxOpen = false; renderInbox(); if (ref.channelId) go('#/sohbet/' + ref.channelId); else if (ref.movementId) openMovement(ref.movementId); else if (ref.materialId) go('#/malzeme/' + ref.materialId); else if (ref.alertId) go('#/alarmlar'); } break;
+      case 'inbox-go': { let ref = {}; try { ref = JSON.parse(d.ref); } catch (err) {} S.inboxOpen = false; renderInbox(); if (ref.channelId) go('#/sohbet/' + ref.channelId); else if (ref.orderId && !ref.movementId) openOrder(ref.orderId); else if (ref.movementId) openMovement(ref.movementId); else if (ref.materialId) go('#/malzeme/' + ref.materialId); else if (ref.alertId) go('#/alarmlar'); } break;
       case 'close-modal': closeModal(); F = null; break;
       case 'copy': try { await navigator.clipboard.writeText(d.text); toast('Kopyalandı.'); } catch (err) { toast('Kopyalanamadı; bağlantıyı seçip kopyalayın.'); } break;
       case 'user-reset': try { const r = await api('POST', '/api/admin/users/' + d.id + '/reset', {}); teamModal(linkNote('Kullanıcı', r.inviteUrl, r.emailed)); } catch (err) { toast(err.message); } break;
@@ -843,6 +953,8 @@
     if (e.target.id === 'search') { S.q = e.target.value; renderRail(); if (S.view === 'materials') renderPaneBody(); }
     else if (e.target.dataset.action === 'mv-q') { clearTimeout(qTimer); qTimer = setTimeout(() => { S.mv.q = e.target.value; S.mv.offset = 0; loadMovements(); }, 250); }
     else if (e.target.id === 'msgSearch') { S.chat.filter = e.target.value; renderMessages(true); }
+    else if (e.target.dataset.action === 'ord-q') { clearTimeout(qTimer); qTimer = setTimeout(() => { S.orders.q = e.target.value; loadOrders(); }, 250); }
+    else if (e.target.closest && e.target.closest('#rcvForm') && e.target.name === 'rqty') updateReceiveHints();
   });
   document.addEventListener('change', (e) => { if (e.target.id === 'fileInput') { addFiles([...e.target.files]); e.target.value = ''; } });
   document.addEventListener('paste', (e) => { if (!$('composer') || !e.clipboardData) return; const files = [...e.clipboardData.files || []]; if (files.length) { e.preventDefault(); addFiles(files); } });
