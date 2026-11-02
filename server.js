@@ -8,6 +8,9 @@ const http = require('http');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const { open, Repo, verifyPassword, token, fmtNum } = require('./lib/db');
+const KINDS = ['in', 'out', 'adj', 'ret', 'xfer'];
+const whOf = (v) => v === 'bonded' ? 'bonded' : 'factory';
+const WH_NAME = { factory: 'Fabrika', bonded: 'Antrepo' };
 const mail = require('./lib/mail');
 const push = require('./lib/push');
 const pdf = require('./lib/pdf');
@@ -301,18 +304,18 @@ function withAlert(m) { if (!m) return m; return { ...m, open_alert: (repo.openA
 // ---------- hareketler (giriş / sevkiyat / düzeltme belgeleri) ----------
 app.get('/api/movements', auth, (req, res) => {
   const q = req.query;
-  const kind = ['in', 'out', 'adj', 'ret'].includes(q.kind) ? q.kind : '';
+  const kind = KINDS.includes(q.kind) ? q.kind : '';
   const limit = Math.min(200, Math.max(1, Number(q.limit) || 50)); const offset = Math.max(0, Number(q.offset) || 0);
-  const r = repo.listMovements({ kind, from: validDate(q.from) ? q.from : '', to: validDate(q.to) ? q.to : '', materialId: str(q.material, 60), q: str(q.q, 80), limit, offset, includeCancelled: q.cancelled === '1' });
+  const r = repo.listMovements({ kind, warehouse: ['factory', 'bonded'].includes(q.wh) ? q.wh : '', from: validDate(q.from) ? q.from : '', to: validDate(q.to) ? q.to : '', materialId: str(q.material, 60), q: str(q.q, 80), limit, offset, includeCancelled: q.cancelled === '1' });
   res.json({ movements: r.rows, total: r.total, limit, offset });
 });
-app.get('/api/movements/suggest', auth, (req, res) => res.json({ orderedBy: repo.orderedByNames(), suppliers: [...new Set([...repo.counterparties('in'), ...repo.suppliers()])], destinations: repo.counterparties('out'), returners: repo.counterparties('ret'), team: repo.activeUsers().map(u => u.name) }));
+app.get('/api/movements/suggest', auth, (req, res) => res.json({ orderedBy: repo.orderedByNames(), suppliers: [...new Set([...repo.counterparties('in'), ...repo.suppliers()])], destinations: repo.counterparties('out'), returners: repo.counterparties('ret'), transferTo: repo.counterparties('xfer'), team: repo.activeUsers().map(u => u.name) }));
 app.get('/api/movements/:id', auth, (req, res) => { const mv = repo.movementRow(req.params.id); if (!mv) return fail(res, 404, 'not_found', 'Belge bulunamadı.'); res.json({ movement: mv }); });
 app.post('/api/movements', auth, writer, (req, res) => {
   const b = req.body || {};
-  const kind = ['in', 'out', 'adj', 'ret'].includes(b.kind) ? b.kind : null; if (!kind) return fail(res, 400, 'bad_request', 'Belge türü giriş, çıkış, geri dönen veya düzeltme olmalıdır.');
+  const kind = KINDS.includes(b.kind) ? b.kind : null; if (!kind) return fail(res, 400, 'bad_request', 'Belge türü giriş, çıkış, geri dönen, düzeltme veya antrepodan aktarma olmalıdır.');
   const doc_date = validDate(b.doc_date) ? b.doc_date : todayIso();
-  const h = { kind, doc_date, ordered_by: str(b.ordered_by, 120), counterparty: str(b.counterparty, 160), reference: str(b.reference, 80), vehicle: str(b.vehicle, 40).toUpperCase(), notes: str(b.notes, 2000) };
+  const h = { kind, warehouse: kind === 'xfer' ? 'bonded' : whOf(b.warehouse), doc_date, ordered_by: str(b.ordered_by, 120), counterparty: str(b.counterparty, 160), reference: str(b.reference, 80), vehicle: str(b.vehicle, 40).toUpperCase(), notes: str(b.notes, 2000) };
   if (!h.ordered_by) return fail(res, 400, 'bad_request', 'Talimatı / siparişi veren kişi belirtilmelidir.');
   const rawLines = Array.isArray(b.lines) ? b.lines : [];
   if (!rawLines.length) return fail(res, 400, 'bad_request', 'En az bir malzeme satırı ekleyin.');
@@ -322,7 +325,7 @@ app.post('/api/movements', auth, writer, (req, res) => {
   let mv;
   try { mv = repo.createMovement(h, lines, req.user.id, !!settings().allowNegative); }
   catch (e) { if (e.code === 'insufficient_stock') return fail(res, 409, 'insufficient_stock', e.message); console.error(e); return fail(res, 500, 'server_error', 'Belge kaydedilemedi: ' + e.message); }
-  activity({ kind: 'movement', userId: req.user.id, title: `${kindName(kind)}: ${mv.doc_no}`, text: `${mv.lines.length} kalem · talimat: ${mv.ordered_by}${mv.counterparty ? ' · ' + mv.counterparty : ''}`, ref: { movementId: mv.id } });
+  activity({ kind: 'movement', userId: req.user.id, title: `${kindName(kind)}: ${mv.doc_no}`, text: `${mv.lines.length} kalem${mv.warehouse === 'bonded' && kind !== 'xfer' ? ' · antrepo' : ''} · talimat: ${mv.ordered_by}${mv.counterparty ? ' · ' + mv.counterparty : ''}`, ref: { movementId: mv.id } });
   broadcast({ t: 'movement', movement: mv });
   for (const id of new Set(mv.lines.map(l => l.material_id))) broadcast({ t: 'material', material: withAlert(repo.materialRow(id)) });
   evaluateAlerts([...new Set(mv.lines.map(l => l.material_id))], mv, req.user);
@@ -386,16 +389,16 @@ function sendCsv(res, name, header, rows) {
 }
 app.get('/api/export/stock.csv', (req, res) => {
   const u = repo.userBySession(parseCookies(req.headers.cookie)[COOKIE]); if (!u) return res.status(401).type('text').send('Giriş yapın.');
-  const rows = repo.listMaterials(true).map(m => [m.code, m.name, m.category, m.location, m.unit, csvNum(m.stock), csvNum(m.min_stock), m.min_stock > 0 && m.stock < m.min_stock ? 'LİMİTİN ALTINDA' : (m.active ? 'Normal' : 'Pasif'), m.description]);
-  sendCsv(res, 'stok-' + todayIso() + '.csv', ['Kod', 'Malzeme', 'Kategori', 'Konum', 'Birim', 'Stok', 'Min. Limit', 'Durum', 'Açıklama'], rows);
+  const rows = repo.listMaterials(true).map(m => [m.code, m.name, m.category, m.location, m.unit, csvNum(m.stock), csvNum(m.bonded_stock), csvNum(Math.round((m.stock + m.bonded_stock) * 1e6) / 1e6), csvNum(m.min_stock), m.min_stock > 0 && m.stock < m.min_stock ? 'LİMİTİN ALTINDA' : (m.active ? 'Normal' : 'Pasif'), m.description]);
+  sendCsv(res, 'stok-' + todayIso() + '.csv', ['Kod', 'Malzeme', 'Kategori', 'Konum', 'Birim', 'Fabrika Stoğu', 'Antrepo Stoğu', 'Toplam', 'Min. Limit', 'Durum', 'Açıklama'], rows);
 });
 app.get('/api/export/movements.csv', (req, res) => {
   const u = repo.userBySession(parseCookies(req.headers.cookie)[COOKIE]); if (!u) return res.status(401).type('text').send('Giriş yapın.');
-  const q = req.query; const kind = ['in', 'out', 'adj', 'ret'].includes(q.kind) ? q.kind : '';
-  const list = repo.listMovements({ kind, from: validDate(q.from) ? q.from : '', to: validDate(q.to) ? q.to : '', materialId: str(q.material, 60), q: str(q.q, 80), limit: 5000, offset: 0, includeCancelled: q.cancelled === '1' }).rows;
+  const q = req.query; const kind = KINDS.includes(q.kind) ? q.kind : '';
+  const list = repo.listMovements({ kind, warehouse: ['factory', 'bonded'].includes(q.wh) ? q.wh : '', from: validDate(q.from) ? q.from : '', to: validDate(q.to) ? q.to : '', materialId: str(q.material, 60), q: str(q.q, 80), limit: 5000, offset: 0, includeCancelled: q.cancelled === '1' }).rows;
   const rows = [];
-  for (const r of list) { const mv = repo.movementRow(r.id); for (const l of mv.lines) rows.push([mv.doc_no, kindName(mv.kind), mv.doc_date, l.material_code, l.material_name, l.unit, csvNum(l.qty), csvNum(l.stock_before), csvNum(l.stock_after), mv.ordered_by, mv.counterparty, mv.reference, mv.vehicle, mv.created_by_name, mv.cancelled ? 'İPTAL' : '', l.note || mv.notes]); }
-  sendCsv(res, 'hareketler-' + todayIso() + '.csv', ['Belge No', 'Tür', 'Tarih', 'Kod', 'Malzeme', 'Birim', 'Miktar', 'Önceki Stok', 'Sonraki Stok', 'Talimatı Veren', 'Karşı Taraf', 'İrsaliye/Ref', 'Plaka', 'Kaydeden', 'Durum', 'Not'], rows);
+  for (const r of list) { const mv = repo.movementRow(r.id); for (const l of mv.lines) rows.push([mv.doc_no, kindName(mv.kind), mv.kind === 'xfer' ? 'Antrepo → Fabrika' : WH_NAME[mv.warehouse] || 'Fabrika', mv.doc_date, l.material_code, l.material_name, l.unit, csvNum(l.qty), csvNum(l.stock_before), csvNum(l.stock_after), mv.kind === 'xfer' ? csvNum(l.to_after) : '', mv.ordered_by, mv.counterparty, mv.reference, mv.vehicle, mv.created_by_name, mv.cancelled ? 'İPTAL' : '', l.note || mv.notes]); }
+  sendCsv(res, 'hareketler-' + todayIso() + '.csv', ['Belge No', 'Tür', 'Depo', 'Tarih', 'Kod', 'Malzeme', 'Birim', 'Miktar', 'Önceki Stok', 'Sonraki Stok', 'Fabrika (aktarma sonrası)', 'Talimatı Veren', 'Karşı Taraf', 'İrsaliye/Ref', 'Plaka', 'Kaydeden', 'Durum', 'Not'], rows);
 });
 
 // ---------- alarmlar ----------
@@ -487,11 +490,11 @@ app.post('/api/orders/:id/receive', auth, writer, (req, res) => {
   const byLine = new Map(o.lines.map(l => [l.id, l]));
   for (const l of raw) { const ol = byLine.get(str(l.line_id, 40)); if (!ol) return fail(res, 400, 'bad_request', 'Satırlardan biri bu siparişe ait değil.'); l.material_id = ol.material_id; }
   const p = parseLines(raw, 'in'); if (p.error) return fail(res, 400, 'bad_request', p.error);
-  const h = { doc_date: validDate(b.doc_date) ? b.doc_date : todayIso(), ordered_by: str(b.ordered_by, 120) || o.ordered_by || req.user.name, counterparty: str(b.counterparty, 160) || o.supplier, reference: str(b.reference, 80) || o.order_no, vehicle: str(b.vehicle, 40).toUpperCase(), notes: str(b.notes, 2000) };
+  const h = { warehouse: whOf(b.warehouse), doc_date: validDate(b.doc_date) ? b.doc_date : todayIso(), ordered_by: str(b.ordered_by, 120) || o.ordered_by || req.user.name, counterparty: str(b.counterparty, 160) || o.supplier, reference: str(b.reference, 80) || o.order_no, vehicle: str(b.vehicle, 40).toUpperCase(), notes: str(b.notes, 2000) };
   let mv;
   try { mv = repo.receiveOrder(o.id, h, p.lines, req.user.id); } catch (e) { console.error(e); return fail(res, 500, 'server_error', 'Teslim alma kaydedilemedi: ' + e.message); }
   const after = repo.orderRow(o.id);
-  activity({ kind: 'order', userId: req.user.id, title: `${o.order_no} siparişinden stoğa eklendi: ${mv.doc_no}`, text: `${mv.lines.length} kalem${after.status === 'done' ? ' · sipariş tamamlandı' : ' · kısmi teslimat'}`, ref: { orderId: o.id, movementId: mv.id } });
+  activity({ kind: 'order', userId: req.user.id, title: `${o.order_no} siparişinden ${mv.warehouse === 'bonded' ? 'antrepo' : 'fabrika'} stoğuna eklendi: ${mv.doc_no}`, text: `${mv.lines.length} kalem${after.status === 'done' ? ' · sipariş tamamlandı' : ' · kısmi teslimat'}`, ref: { orderId: o.id, movementId: mv.id } });
   broadcast({ t: 'movement', movement: mv }); broadcast({ t: 'order', order: after });
   for (const id of new Set(mv.lines.map(l => l.material_id))) broadcast({ t: 'material', material: withAlert(repo.materialRow(id)) });
   evaluateAlerts([...new Set(mv.lines.map(l => l.material_id))], mv, req.user);
@@ -625,6 +628,7 @@ app.get('/api/dashboard', auth, (req, res) => {
     today, materials: materials.length, low: low.length, near: near.length, noLimit: materials.filter(m => !(m.min_stock > 0)).length,
     todayIn: pick(todayCounts, 'in').n, todayOut: pick(todayCounts, 'out').n, weekIn: pick(weekCounts, 'in').n, weekOut: pick(weekCounts, 'out').n,
     recent: repo.listMovements({ limit: 12, offset: 0 }).rows, alerts: repo.listAlerts({ open: true, limit: 50 }), orders: repo.orderStats(today),
+    bonded: (() => { const list = materials.filter(m => m.bonded_stock > 0.0000005).sort((a, b) => (b.last_bonded_move || 0) - (a.last_bonded_move || 0)); return { materials: list.length, list: list.slice(0, 8) }; })(),
     lowList: low.sort((a, b) => (a.stock / a.min_stock) - (b.stock / b.min_stock)).slice(0, 20), nearList: near.slice(0, 10),
   });
 });
@@ -634,7 +638,7 @@ app.get('/api/activity', auth, (req, res) => res.json({ items: repo.listActivity
 app.post('/api/activity/seen', auth, (req, res) => { const ts = Number((req.body || {}).ts) || Date.now(); repo.setInboxSeen(req.user.id, ts); res.json({ ok: true, seen: ts }); });
 function activity(a) { const row = repo.addActivity(a); const to = a.ref && a.ref.forUser; const msg = JSON.stringify({ t: 'activity', item: row }); for (const c of clients) if ((!to || c.user.id === to) && c.ws.readyState === 1) c.ws.send(msg); return row; }
 
-const kindName = (k) => k === 'in' ? 'Giriş' : k === 'out' ? 'Çıkış' : k === 'ret' ? 'Geri dönen' : 'Düzeltme';
+const kindName = (k) => k === 'in' ? 'Giriş' : k === 'out' ? 'Çıkış' : k === 'ret' ? 'Geri dönen' : k === 'xfer' ? 'Antrepodan fabrikaya aktarma' : 'Düzeltme';
 const roleName = (r) => r === 'admin' ? 'yönetici' : r === 'viewer' ? 'görüntüleyici' : 'kullanıcı';
 
 // ---------- statik dosyalar ve sayfalar ----------
